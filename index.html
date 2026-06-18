@@ -48,22 +48,20 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
   gap:16px;margin-bottom:20px;
 }
 #orb-canvas{
-  width:220px;height:220px;
+  width:240px;height:240px;
   border-radius:50%;
   display:block;
-  filter:drop-shadow(0 0 40px rgba(82,181,202,0.4)) drop-shadow(0 0 80px rgba(123,47,190,0.25));
-  animation:orbFloat 4s ease-in-out infinite;
+  animation:orbFloat 5s ease-in-out infinite;
 }
 @keyframes orbFloat{
-  0%,100%{transform:translateY(0)}
-  50%{transform:translateY(-8px)}
+  0%,100%{transform:translateY(0) scale(1)}
+  50%{transform:translateY(-10px) scale(1.02)}
 }
 #mini-orb{
   width:32px;height:32px;
   border-radius:50%;
   display:block;
   flex-shrink:0;
-  filter:drop-shadow(0 0 8px rgba(82,181,202,0.5));
   opacity:0.9;
 }
 
@@ -303,20 +301,51 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 .chip.x:hover{border-color:#8B5CF6;color:#8B5CF6;background:rgba(139,92,246,0.07);transform:translateY(-1px);box-shadow:0 4px 12px rgba(139,92,246,0.12)}
 
 /* ── INPUT — GLASSY WITH VISIBLE TEXT ─────────────────────────────────────── */
-.inp-area{padding:12px 28px 18px;flex-shrink:0;position:relative;z-index:10;background:rgba(248,249,255,0.96);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid rgba(138,180,248,0.12);}
+.inp-area{padding:14px 28px 20px;flex-shrink:0;position:relative;z-index:10;background:rgba(248,249,255,0.88);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-top:1px solid rgba(138,180,248,0.1);}
 .inp-wrap{max-width:100%;margin:0;display:flex;flex-direction:column;gap:7px}
+
+/* Animated gradient border wrapper */
+.inp-pill-border{
+  position:relative;
+  border-radius:30px;
+  padding:1.5px;
+  background:linear-gradient(var(--bp,0deg),#52B5CA 0%,#7B2FBE 30%,#f72585 55%,#06D6A0 80%,#52B5CA 100%);
+  background-size:300% 300%;
+  animation:borderFlow 4s linear infinite;
+  box-shadow:0 0 20px rgba(82,181,202,0.18),0 0 40px rgba(123,47,190,0.10);
+  transition:box-shadow .3s;
+}
+.inp-pill-border:focus-within{
+  box-shadow:0 0 28px rgba(82,181,202,0.35),0 0 56px rgba(123,47,190,0.18),0 0 80px rgba(247,37,133,0.10);
+}
+@keyframes borderFlow{
+  0%  {background-position:0% 50%}
+  50% {background-position:100% 50%}
+  100%{background-position:0% 50%}
+}
+
 .inp-pill{
   display:flex;align-items:center;gap:8px;
-  background:#ffffff;
-  border:1.5px solid rgba(138,180,248,0.25);
+  background:rgba(255,255,255,0.88);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border:none;
   border-radius:28px;
   padding:10px 10px 10px 14px;
-  box-shadow:0 2px 16px rgba(82,100,200,0.08),0 1px 4px rgba(0,0,0,0.04);
-  transition:border-color .2s,box-shadow .2s;
+  position:relative;
+  overflow:hidden;
 }
-.inp-pill:focus-within{
-  border-color:rgba(138,180,248,0.7);
-  box-shadow:0 2px 16px rgba(82,100,200,0.1),0 0 0 3px rgba(138,180,248,0.15);
+/* Shimmer sweep on idle */
+.inp-pill::before{
+  content:'';
+  position:absolute;inset:0;
+  background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,0.45) 50%,transparent 60%);
+  background-size:200% 100%;
+  animation:shimmer 3.5s ease-in-out infinite;
+  pointer-events:none;border-radius:28px;
+}
+@keyframes shimmer{
+  0%  {background-position:200% 0}
+  100%{background-position:-200% 0}
 }
 
 #msg-inp{
@@ -506,7 +535,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
       <div class="welcome" id="welcome">
         <div class="welcome-content">
           <div class="orb-container">
-            <canvas id="orb-canvas" width="220" height="220"></canvas>
+            <canvas id="orb-canvas" width="240" height="240"></canvas>
             <svg width="40" height="40" viewBox="0 0 48 48" class="gemini-star" aria-label="CMM AI">
               <defs>
                 <linearGradient id="gstar" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -558,6 +587,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 
   <div class="inp-area">
     <div class="inp-wrap">
+      <div class="inp-pill-border">
       <div class="inp-pill">
         <div class="inp-orb-wrap"><canvas id="mini-orb" width="32" height="32"></canvas></div>
         <textarea id="msg-inp" rows="1" placeholder="Ask Gemini about your campaigns&hellip;" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
@@ -565,6 +595,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
           <svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
         </button>
       </div>
+      </div><!-- /inp-pill-border -->
       <div class="inp-foot">Curious Minds Media &nbsp;&middot;&nbsp; wearecuriousminds.com &nbsp;&middot;&nbsp; Enter to send</div>
     </div>
   </div>
@@ -802,7 +833,7 @@ function welcomeHTML(){
   return`<div class="welcome" id="welcome">
   <div class="welcome-content">
     <div class="orb-container">
-      <canvas id="orb-canvas" width="220" height="220"></canvas>
+      <canvas id="orb-canvas" width="240" height="240"></canvas>
       <svg width="40" height="40" viewBox="0 0 48 48" class="gemini-star" aria-label="CMM AI">
         <defs>
           <linearGradient id="gstar" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -1911,123 +1942,203 @@ function drawOrb(canvas, ctx, t, state) {
 
   ctx.clearRect(0, 0, W, H);
 
-  var spd = STATE_SPEED[state] || 0.35;
+  var spd = STATE_SPEED[state] || 0.3;
   var tt  = t * spd;
-  var intensity = STATE_INTENSITY[state] || 0.55;
+  var ity = STATE_INTENSITY[state] || 0.65;
 
-  // --- 1. Clip to sphere ---
+  // ── STEP 1: clip everything to sphere ──────────────────────────────────
   ctx.save();
   ctx.beginPath();
   ctx.arc(cx, cy, R, 0, Math.PI * 2);
   ctx.clip();
 
-  // --- 2. Dark sphere base ---
-  var base = ctx.createRadialGradient(cx - R*0.25, cy - R*0.25, 0, cx, cy, R);
-  base.addColorStop(0,   'rgba(22,12,48,0.98)');
-  base.addColorStop(0.5, 'rgba(8,6,22,0.99)');
-  base.addColorStop(1,   'rgba(2,2,12,1)');
+  // ── STEP 2: Deep 3D base — dark center fading to near-black edge ───────
+  var base = ctx.createRadialGradient(cx - R*0.1, cy - R*0.1, 0, cx, cy, R);
+  base.addColorStop(0,    '#14093a');
+  base.addColorStop(0.45, '#08051e');
+  base.addColorStop(1,    '#020208');
   ctx.fillStyle = base;
   ctx.fillRect(0, 0, W, H);
 
-  // --- 3. Flowing silk ribbons ---
-  orbRibbons.forEach(function(rb, i) {
-    var r = rb.rgb[0], g = rb.rgb[1], b = rb.rgb[2];
-    for (var k = 0; k < 3; k++) {
-      var angle  = tt * 0.012 * rb.freq + rb.phase + k * 2.094 + i * 0.628;
-      var spread = 0.55 + 0.28 * Math.sin(tt * 0.007 + i * 1.3);
-      var x1 = cx + R * Math.cos(angle) * 0.92;
-      var y1 = cy + R * Math.sin(angle) * 0.92;
-      var x2 = cx + R * Math.cos(angle + Math.PI) * 0.92;
-      var y2 = cy + R * Math.sin(angle + Math.PI) * 0.92;
-      var cp1x = cx + R * Math.cos(angle + 0.9 + k*0.32) * spread;
-      var cp1y = cy + R * Math.sin(angle + 0.9 + k*0.32) * spread;
-      var cp2x = cx + R * Math.cos(angle - 0.9 - k*0.32) * (spread * 0.85);
-      var cp2y = cy + R * Math.sin(angle - 0.9 - k*0.32) * (spread * 0.85);
-      var alpha = intensity * rb.amp * (0.38 + 0.28 * Math.sin(tt * 0.009 + i * 1.1 + k * 0.7));
+  // ── STEP 3: Ambient colour pools — the deep inner hue of the sphere ────
+  var pools = [
+    { rgb:[70,160,210],  nx:0.28, ny:0.65, nr:0.72 },  // cyan
+    { rgb:[100,40,180],  nx:0.72, ny:0.30, nr:0.65 },  // purple
+    { rgb:[220,30,110],  nx:0.68, ny:0.68, nr:0.58 },  // magenta
+    { rgb:[10,190,140],  nx:0.32, ny:0.32, nr:0.55 },  // teal
+  ];
+  pools.forEach(function(p, i) {
+    var px = cx + R * ((p.nx * 2 - 1) * (0.75 + 0.18 * Math.sin(tt * 0.007 + i * 1.3)));
+    var py = cy + R * ((p.ny * 2 - 1) * (0.75 + 0.18 * Math.cos(tt * 0.006 + i * 1.1)));
+    var pr = R * p.nr;
+    var pg = ctx.createRadialGradient(px, py, 0, px, py, pr);
+    var a  = ity * 0.38;
+    pg.addColorStop(0,   'rgba(' + p.rgb[0] + ',' + p.rgb[1] + ',' + p.rgb[2] + ',' + a + ')');
+    pg.addColorStop(0.5, 'rgba(' + p.rgb[0] + ',' + p.rgb[1] + ',' + p.rgb[2] + ',' + (a*0.4) + ')');
+    pg.addColorStop(1,   'rgba(' + p.rgb[0] + ',' + p.rgb[1] + ',' + p.rgb[2] + ',0)');
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.fillStyle = pg;
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  });
+
+  // ── STEP 4: Silk light streams (thin flowing bezier curves) ────────────
+  var streams = [
+    { rgb:[120, 230, 255], phase: 0,    freq: 1.00, layers: 5 },
+    { rgb:[190, 100, 255], phase: 1.26, freq: 0.91, layers: 4 },
+    { rgb:[255,  80, 160], phase: 2.51, freq: 1.08, layers: 4 },
+    { rgb:[ 80, 255, 200], phase: 3.77, freq: 0.86, layers: 3 },
+    { rgb:[255, 210,  60], phase: 5.03, freq: 1.16, layers: 2 },
+  ];
+
+  streams.forEach(function(s, si) {
+    var sr = s.rgb[0], sg = s.rgb[1], sb = s.rgb[2];
+    for (var k = 0; k < s.layers; k++) {
+      var ang = tt * 0.009 * s.freq + s.phase + k * (Math.PI * 2 / s.layers);
+
+      // Two endpoints on the sphere surface
+      var a1 = ang;
+      var a2 = ang + Math.PI + 0.3 * Math.sin(tt * 0.005 + si + k);
+      var x1 = cx + R * 0.90 * Math.cos(a1);
+      var y1 = cy + R * 0.90 * Math.sin(a1);
+      var x2 = cx + R * 0.90 * Math.cos(a2);
+      var y2 = cy + R * 0.90 * Math.sin(a2);
+
+      // Control points — offset inward to create the arc
+      var ca1 = ang + 0.7  + 0.25 * Math.sin(tt * 0.006 + si * 0.9);
+      var ca2 = ang - 0.65 + 0.25 * Math.cos(tt * 0.007 + k  * 1.1);
+      var cr1 = R * (0.42 + 0.22 * Math.sin(tt * 0.005 + si + k));
+      var cr2 = R * (0.38 + 0.20 * Math.cos(tt * 0.006 + si - k));
+      var cp1x = cx + cr1 * Math.cos(ca1);
+      var cp1y = cy + cr1 * Math.sin(ca1);
+      var cp2x = cx + cr2 * Math.cos(ca2);
+      var cp2y = cy + cr2 * Math.sin(ca2);
+
+      var baseAlpha = ity * (0.42 + 0.30 * Math.sin(tt * 0.010 + si * 1.2 + k * 0.8));
 
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
-      var grad = ctx.createLinearGradient(x1, y1, x2, y2);
-      grad.addColorStop(0,    'rgba('+r+','+g+','+b+',0)');
-      grad.addColorStop(0.25, 'rgba('+r+','+g+','+b+','+(alpha*0.7)+')');
-      grad.addColorStop(0.5,  'rgba('+r+','+g+','+b+','+alpha+')');
-      grad.addColorStop(0.75, 'rgba('+r+','+g+','+b+','+(alpha*0.7)+')');
-      grad.addColorStop(1,    'rgba('+r+','+g+','+b+',0)');
-      ctx.strokeStyle = grad;
-      ctx.lineWidth   = R * (0.14 + 0.07 * Math.sin(tt * 0.006 + i + k));
-      ctx.lineCap     = 'round';
+
+      // Core line — sharp and bright
+      var coreGrad = ctx.createLinearGradient(x1, y1, x2, y2);
+      coreGrad.addColorStop(0,    'rgba(' + sr + ',' + sg + ',' + sb + ',0)');
+      coreGrad.addColorStop(0.25, 'rgba(' + sr + ',' + sg + ',' + sb + ',' + (baseAlpha * 0.8) + ')');
+      coreGrad.addColorStop(0.5,  'rgba(' + sr + ',' + sg + ',' + sb + ',' + baseAlpha + ')');
+      coreGrad.addColorStop(0.75, 'rgba(' + sr + ',' + sg + ',' + sb + ',' + (baseAlpha * 0.8) + ')');
+      coreGrad.addColorStop(1,    'rgba(' + sr + ',' + sg + ',' + sb + ',0)');
+      ctx.strokeStyle = coreGrad;
+      ctx.lineWidth   = R * (0.018 + 0.010 * Math.sin(tt * 0.008 + si + k));
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
       ctx.beginPath();
       ctx.moveTo(x1, y1);
       ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x2, y2);
       ctx.stroke();
+
+      // Soft glow halo around core line
+      var glowGrad = ctx.createLinearGradient(x1, y1, x2, y2);
+      glowGrad.addColorStop(0,   'rgba(' + sr + ',' + sg + ',' + sb + ',0)');
+      glowGrad.addColorStop(0.5, 'rgba(' + sr + ',' + sg + ',' + sb + ',' + (baseAlpha * 0.22) + ')');
+      glowGrad.addColorStop(1,   'rgba(' + sr + ',' + sg + ',' + sb + ',0)');
+      ctx.strokeStyle = glowGrad;
+      ctx.lineWidth   = R * (0.07 + 0.04 * Math.sin(tt * 0.008 + si));
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x2, y2);
+      ctx.stroke();
+
       ctx.restore();
     }
   });
 
-  // --- 4. Thinking vortex rings ---
-  if (state === 'thinking') {
-    for (var ring = 0; ring < 4; ring++) {
-      var rr = R * (0.28 + ring * 0.19);
-      var ra = 0.28 * (1 - ring * 0.2) * (0.7 + 0.3 * Math.sin(tt * 0.025 + ring));
-      ctx.save();
-      ctx.globalCompositeOperation = 'screen';
-      ctx.strokeStyle = 'rgba(138,180,248,' + ra + ')';
-      ctx.lineWidth   = 1.2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, rr * (1 + 0.04 * Math.sin(tt * 0.03 + ring * 1.2)), 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
-  }
-
-  // --- 5. Answering: radiating pulses ---
-  if (state === 'answering') {
-    for (var p = 0; p < 3; p++) {
-      var pr = R * (0.3 + 0.25 * ((tt * 0.015 + p * 0.33) % 1.0));
-      var pa = 0.35 * (1 - ((tt * 0.015 + p * 0.33) % 1.0));
-      ctx.save();
-      ctx.globalCompositeOperation = 'screen';
-      ctx.strokeStyle = 'rgba(82,181,202,' + pa + ')';
-      ctx.lineWidth   = 1.5;
-      ctx.beginPath();
-      ctx.arc(cx, cy, pr, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
-  }
-
-  // --- 6. Central glow ---
-  var glowPulse = 0.22 + 0.06 * Math.sin(tt * 0.009);
-  var glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * glowPulse);
-  glow.addColorStop(0,    'rgba(255,255,255,0.92)');
-  glow.addColorStop(0.35, 'rgba(200,225,255,0.55)');
-  glow.addColorStop(0.7,  'rgba(120,180,255,0.15)');
-  glow.addColorStop(1,    'rgba(100,160,255,0)');
+  // ── STEP 5: Bright white core glow ─────────────────────────────────────
+  var coreR  = R * (0.19 + 0.05 * Math.sin(tt * 0.013));
+  var coreG  = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR * 2.5);
+  coreG.addColorStop(0,    'rgba(255,255,255,0.95)');
+  coreG.addColorStop(0.25, 'rgba(220,240,255,0.72)');
+  coreG.addColorStop(0.55, 'rgba(160,210,255,0.28)');
+  coreG.addColorStop(1,    'rgba(120,180,255,0)');
   ctx.save();
   ctx.globalCompositeOperation = 'screen';
-  ctx.fillStyle = glow;
+  ctx.fillStyle = coreG;
   ctx.fillRect(0, 0, W, H);
   ctx.restore();
 
-  // --- 7. Glass highlight ---
-  var rim = ctx.createRadialGradient(cx - R*0.38, cy - R*0.38, 0, cx - R*0.1, cy - R*0.1, R * 0.85);
-  rim.addColorStop(0,    'rgba(255,255,255,0.20)');
-  rim.addColorStop(0.45, 'rgba(255,255,255,0.05)');
-  rim.addColorStop(1,    'rgba(255,255,255,0)');
-  ctx.fillStyle = rim;
+  // ── STEP 6: State FX ────────────────────────────────────────────────────
+  if (state === 'thinking') {
+    for (var ri = 0; ri < 3; ri++) {
+      var rr  = R * (0.32 + ri * 0.20);
+      var ra  = (0.28 - ri * 0.07) * (0.7 + 0.3 * Math.sin(tt * 0.022 + ri));
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.strokeStyle = 'rgba(140,185,255,' + ra + ')';
+      ctx.lineWidth   = 1.0;
+      ctx.setLineDash([5, 8]);
+      ctx.lineDashOffset = -(tt * 0.6 + ri * 12);
+      ctx.beginPath();
+      ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+  }
+  if (state === 'answering') {
+    for (var pi = 0; pi < 3; pi++) {
+      var ph  = ((tt * 0.022 + pi * 0.333) % 1.0);
+      var pr2 = R * (0.18 + ph * 0.78);
+      var pa  = (1.0 - ph) * 0.42;
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.strokeStyle = 'rgba(82,220,255,' + pa + ')';
+      ctx.lineWidth   = 1.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, pr2, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // ── STEP 7: 3-D depth vignette — darkens the edges of the sphere ───────
+  var vig = ctx.createRadialGradient(cx, cy, R * 0.48, cx, cy, R);
+  vig.addColorStop(0,   'rgba(0,0,0,0)');
+  vig.addColorStop(0.6, 'rgba(0,0,0,0.08)');
+  vig.addColorStop(1,   'rgba(0,0,0,0.70)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, W, H);
+
+  // ── STEP 8: Glass specular highlight — makes it look like a sphere ──────
+  // Large soft crescent (main highlight)
+  var hx = cx - R * 0.30, hy = cy - R * 0.28;
+  var hg = ctx.createRadialGradient(hx, hy, 0, hx, hy, R * 0.52);
+  hg.addColorStop(0,    'rgba(255,255,255,0.50)');
+  hg.addColorStop(0.35, 'rgba(255,255,255,0.18)');
+  hg.addColorStop(0.7,  'rgba(255,255,255,0.04)');
+  hg.addColorStop(1,    'rgba(255,255,255,0)');
+  ctx.fillStyle = hg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Small sharp specular dot
+  var sx = cx - R * 0.20, sy = cy - R * 0.40;
+  var sg2 = ctx.createRadialGradient(sx, sy, 0, sx, sy, R * 0.10);
+  sg2.addColorStop(0,   'rgba(255,255,255,0.82)');
+  sg2.addColorStop(0.5, 'rgba(255,255,255,0.25)');
+  sg2.addColorStop(1,   'rgba(255,255,255,0)');
+  ctx.fillStyle = sg2;
   ctx.fillRect(0, 0, W, H);
 
   ctx.restore(); // end sphere clip
 
-  // --- 8. Outer glow ring ---
-  var idx = Math.floor(Math.abs(Math.sin(tt * 0.004)) * orbRibbons.length) % orbRibbons.length;
-  var gc  = orbRibbons[idx].rgb;
-  var outerGlow = ctx.createRadialGradient(cx, cy, R * 0.88, cx, cy, R * 1.25);
-  outerGlow.addColorStop(0, 'rgba('+gc[0]+','+gc[1]+','+gc[2]+',0.18)');
-  outerGlow.addColorStop(1, 'rgba('+gc[0]+','+gc[1]+','+gc[2]+',0)');
-  ctx.fillStyle = outerGlow;
+  // ── STEP 9: Outer ambient glow (outside sphere) ─────────────────────────
+  var glowIdx = Math.floor(Math.abs(Math.sin(tt * 0.004)) * pools.length) % pools.length;
+  var gc2 = pools[glowIdx].rgb;
+  var og  = ctx.createRadialGradient(cx, cy, R * 0.88, cx, cy, R * 1.35);
+  og.addColorStop(0,   'rgba(' + gc2[0] + ',' + gc2[1] + ',' + gc2[2] + ',0.22)');
+  og.addColorStop(0.5, 'rgba(' + gc2[0] + ',' + gc2[1] + ',' + gc2[2] + ',0.08)');
+  og.addColorStop(1,   'rgba(' + gc2[0] + ',' + gc2[1] + ',' + gc2[2] + ',0)');
+  ctx.fillStyle = og;
   ctx.beginPath();
-  ctx.arc(cx, cy, R * 1.25, 0, Math.PI * 2);
+  ctx.arc(cx, cy, R * 1.35, 0, Math.PI * 2);
   ctx.fill();
 }
 
