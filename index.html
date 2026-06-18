@@ -47,18 +47,29 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
   display:flex;flex-direction:column;align-items:center;
   gap:14px;margin-bottom:20px;
 }
+@keyframes float{
+  0%,100%{ transform:scale(1); }
+  50%    { transform:scale(1.15); }
+}
 #orb-canvas{
   width:240px;height:240px;
-  display:block;
   border-radius:50%;
-  background: radial-gradient(circle at 40% 35%, #1c0e88 0%, #0c0650 40%, #050325 75%, #010010 100%);
+  background:
+    radial-gradient(circle at 30% 30%, #00ffff, transparent 40%),
+    radial-gradient(circle at 70% 30%, #7f00ff, transparent 40%),
+    radial-gradient(circle at 50% 80%, #ff00aa, transparent 40%);
+  filter:blur(15px);
+  animation:float 4s ease-in-out infinite;
 }
 #mini-orb{
   width:32px;height:32px;
-  display:block;
-  flex-shrink:0;
   border-radius:50%;
-  background: radial-gradient(circle at 40% 35%, #1c0e88 0%, #0c0650 50%, #010010 100%);
+  flex-shrink:0;
+  background:
+    radial-gradient(circle at 30% 30%, #00ffff, transparent 40%),
+    radial-gradient(circle at 70% 30%, #7f00ff, transparent 40%),
+    radial-gradient(circle at 50% 80%, #ff00aa, transparent 40%);
+  filter:blur(3px);
 }
 
 /* ── GEMINI STAR ─────────────────────────────────────────────────────────── */
@@ -552,7 +563,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
       <div class="welcome" id="welcome">
         <div class="welcome-content">
           <div class="orb-container">
-            <canvas id="orb-canvas" width="480" height="480" class="orb-float"></canvas>
+            <div id="orb-canvas"></div>
             <svg width="40" height="40" viewBox="0 0 48 48" class="gemini-star" aria-label="CMM AI">
               <defs>
                 <linearGradient id="gstar" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -609,7 +620,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
         <button class="inp-plus-btn" title="Attach" onclick="openSettings()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
-        <div class="inp-orb-wrap"><canvas id="mini-orb" width="64" height="64"></canvas></div>
+        <div class="inp-orb-wrap"><div id="mini-orb"></div></div>
         <textarea id="msg-inp" rows="1" placeholder="Ask Gemini" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
         <button class="inp-mic-btn" id="mic-btn" title="Voice input">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M19 10a7 7 0 01-14 0M12 19v3M9 22h6"/></svg>
@@ -856,7 +867,7 @@ function welcomeHTML(){
   return`<div class="welcome" id="welcome">
   <div class="welcome-content">
     <div class="orb-container">
-      <canvas id="orb-canvas" width="480" height="480" class="orb-float"></canvas>
+      <div id="orb-canvas"></div>
       <svg width="40" height="40" viewBox="0 0 48 48" class="gemini-star" aria-label="CMM AI">
         <defs>
           <linearGradient id="gstar" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -2208,171 +2219,14 @@ function drawBgOrbs(canvas, ctx, t) {
   });
 }
 
-// ── Siri orb canvas renderer — vivid screen/lighter blends ─────────────────
+// ── Siri orb is now pure CSS (see #orb-canvas styles) ─────────────────────
 var siriOrbT = 0;
-
-// Thin flat ribbon via squash-scale + radial gradient — 'lighter' blend
-function _ribbon(ctx, cx, cy, R, angle, r, g, b, alpha, thick) {
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(angle);
-  ctx.scale(1, thick);
-  var gr = ctx.createRadialGradient(0, 0, 0, 0, 0, R * 0.92);
-  gr.addColorStop(0,    'rgba('+r+','+g+','+b+','+alpha+')');
-  gr.addColorStop(0.38, 'rgba('+r+','+g+','+b+','+(alpha*0.55)+')');
-  gr.addColorStop(0.70, 'rgba('+r+','+g+','+b+','+(alpha*0.14)+')');
-  gr.addColorStop(1,    'rgba('+r+','+g+','+b+',0)');
-  ctx.fillStyle = gr;
-  ctx.beginPath();
-  ctx.arc(0, 0, R * 0.92, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
-
-function renderSiriOrb(canvas, t, state, isMini) {
-  var W   = canvas.width,  H  = canvas.height;
-  var cx  = W / 2,         cy = H / 2;
-  var R   = Math.min(W, H) * 0.46;
-  var ctx = canvas.getContext('2d');
-  var sp  = state === 'thinking' ? 2.8 : state === 'typing' ? 1.6 : state === 'answering' ? 1.9 : 1.0;
-  var ts  = t * sp;
-  var PI2 = Math.PI * 2;
-
-  ctx.clearRect(0, 0, W, H);
-
-  // ── Sphere clip ───────────────────────────────────────────────────────────
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(cx, cy, R, 0, PI2);
-  ctx.clip();
-
-  // 1. Dark indigo base
-  var bg = ctx.createRadialGradient(cx - R*0.12, cy - R*0.10, R*0.01, cx, cy, R);
-  bg.addColorStop(0,    '#1e1090');
-  bg.addColorStop(0.28, '#0e0760');
-  bg.addColorStop(0.62, '#060330');
-  bg.addColorStop(1,    '#010012');
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, W, H);
-
-  // 2. Large colour blobs — screen blend makes them vivid on dark background
-  //    screen formula: out = src + dst - src*dst  →  vivid hues on near-black
-  ctx.globalCompositeOperation = 'screen';
-
-  // Red/crimson blob — orbits slowly CW
-  var b1a = ts * 0.45;
-  var b1x = cx + Math.cos(b1a) * R * 0.38;
-  var b1y = cy + Math.sin(b1a) * R * 0.38;
-  var bg1 = ctx.createRadialGradient(b1x, b1y, 0, b1x, b1y, R * 0.84);
-  bg1.addColorStop(0,    'rgba(255,28,4,0.96)');
-  bg1.addColorStop(0.35, 'rgba(220,20,3,0.60)');
-  bg1.addColorStop(0.68, 'rgba(180,12,2,0.18)');
-  bg1.addColorStop(1,    'rgba(0,0,0,0)');
-  ctx.fillStyle = bg1;
-  ctx.beginPath(); ctx.arc(cx, cy, R, 0, PI2); ctx.fill();
-
-  // Blue blob — orbits opposite side
-  var b2a = b1a + Math.PI * 1.15;
-  var b2x = cx + Math.cos(b2a) * R * 0.35;
-  var b2y = cy + Math.sin(b2a) * R * 0.35;
-  var bg2 = ctx.createRadialGradient(b2x, b2y, 0, b2x, b2y, R * 0.80);
-  bg2.addColorStop(0,    'rgba(10,48,255,0.92)');
-  bg2.addColorStop(0.35, 'rgba(8,36,210,0.55)');
-  bg2.addColorStop(0.68, 'rgba(5,20,160,0.16)');
-  bg2.addColorStop(1,    'rgba(0,0,0,0)');
-  ctx.fillStyle = bg2;
-  ctx.beginPath(); ctx.arc(cx, cy, R, 0, PI2); ctx.fill();
-
-  ctx.globalCompositeOperation = 'source-over';
-
-  // 3. Bright thin ribbons — lighter blend (additive) for neon effect
-  ctx.globalCompositeOperation = 'lighter';
-
-  // Cyan ribbon — main, fast CW
-  _ribbon(ctx, cx, cy, R,  ts * 2.20,                  0, 235, 255, 0.96, 0.10);
-  // Green ribbon — offset, slightly slower
-  _ribbon(ctx, cx, cy, R,  ts * 2.20 + Math.PI * 0.42, 0, 255, 145, 0.88, 0.08);
-  // Pink/magenta ribbon — counter-rotates
-  _ribbon(ctx, cx, cy, R, -ts * 1.60 + Math.PI * 0.28, 255, 22, 130, 0.92, 0.09);
-  // Pale blue accent
-  _ribbon(ctx, cx, cy, R,  ts * 2.20 + Math.PI,        80, 145, 255, 0.65, 0.06);
-
-  ctx.globalCompositeOperation = 'source-over';
-
-  // 4. White centre convergence glow — where ribbons meet
-  var cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.22);
-  cg.addColorStop(0,    'rgba(255,255,255,0.95)');
-  cg.addColorStop(0.20, 'rgba(220,245,255,0.55)');
-  cg.addColorStop(0.55, 'rgba(180,220,255,0.12)');
-  cg.addColorStop(1,    'rgba(0,0,0,0)');
-  ctx.fillStyle = cg;
-  ctx.beginPath(); ctx.arc(cx, cy, R * 0.22, 0, PI2); ctx.fill();
-
-  // 5. Vignette — dark edges for 3D depth (not crushed to full black so colours breathe)
-  var vig = ctx.createRadialGradient(cx, cy, R * 0.28, cx, cy, R);
-  vig.addColorStop(0,    'rgba(0,0,0,0)');
-  vig.addColorStop(0.44, 'rgba(0,0,0,0.15)');
-  vig.addColorStop(0.65, 'rgba(0,0,0,0.52)');
-  vig.addColorStop(0.82, 'rgba(0,0,0,0.80)');
-  vig.addColorStop(0.94, 'rgba(0,0,0,0.94)');
-  vig.addColorStop(1.0,  'rgba(0,0,0,1.0)');
-  ctx.fillStyle = vig;
-  ctx.fillRect(0, 0, W, H);
-
-  ctx.restore();  // release sphere clip
-
-  // 6. Bright cyan rim glow — simulates InnerGlowStrokes with 'lighter' blend
-  ctx.globalCompositeOperation = 'lighter';
-  if (!isMini) {
-    // Soft outer halo (simulates blur)
-    for (var s = 0; s < 5; s++) {
-      ctx.beginPath();
-      ctx.arc(cx, cy, R - 1 - s * 3, 0, PI2);
-      ctx.strokeStyle = 'rgba(0,220,255,' + (0.26 - s * 0.04) + ')';
-      ctx.lineWidth   = 10 - s;
-      ctx.stroke();
-    }
-    // Sharp mid rim
-    ctx.beginPath(); ctx.arc(cx, cy, R - 0.8, 0, PI2);
-    ctx.strokeStyle = 'rgba(80,238,255,0.85)';
-    ctx.lineWidth   = 2;
-    ctx.stroke();
-    // Crisp bright edge
-    ctx.beginPath(); ctx.arc(cx, cy, R - 0.2, 0, PI2);
-    ctx.strokeStyle = 'rgba(200,250,255,0.95)';
-    ctx.lineWidth   = 0.8;
-    ctx.stroke();
-  } else {
-    ctx.beginPath(); ctx.arc(cx, cy, R - 0.4, 0, PI2);
-    ctx.strokeStyle = 'rgba(80,230,255,0.88)';
-    ctx.lineWidth   = 1.5;
-    ctx.stroke();
-  }
-  ctx.globalCompositeOperation = 'source-over';
-
-  // 7. Specular highlight — glass catch-light upper-left
-  ctx.save();
-  ctx.beginPath(); ctx.arc(cx, cy, R, 0, PI2); ctx.clip();
-  var spec = ctx.createRadialGradient(cx-R*0.28, cy-R*0.32, 0, cx-R*0.22, cy-R*0.26, R*0.28);
-  spec.addColorStop(0,    'rgba(255,255,255,0.88)');
-  spec.addColorStop(0.16, 'rgba(255,255,255,0.28)');
-  spec.addColorStop(0.42, 'rgba(255,255,255,0.06)');
-  spec.addColorStop(1,    'rgba(255,255,255,0)');
-  ctx.fillStyle = spec;
-  ctx.fillRect(0, 0, W, H);
-  ctx.restore();
-}
 
 function siriAnimLoop() {
   requestAnimationFrame(siriAnimLoop);
-  var orbCvs  = document.getElementById('orb-canvas');
-  var miniCvs = document.getElementById('mini-orb');
-  var bgCvs   = document.getElementById('siri-canvas');
-  try { if (orbCvs  && orbCvs.getContext)  renderSiriOrb(orbCvs,  siriOrbT, siriState, false); } catch(e) {}
-  try { if (miniCvs && miniCvs.getContext) renderSiriOrb(miniCvs, siriOrbT, siriState, true);  } catch(e) {}
-  try { if (bgCvs)                         drawBgOrbs(bgCvs, bgCvs.getContext('2d'), siriT);   } catch(e) {}
-  siriT    += 1.0;
-  siriOrbT += 0.016;
+  var bgCvs = document.getElementById('siri-canvas');
+  try { if (bgCvs) drawBgOrbs(bgCvs, bgCvs.getContext('2d'), siriT); } catch(e) {}
+  siriT += 1.0;
 }
 requestAnimationFrame(siriAnimLoop);
 
