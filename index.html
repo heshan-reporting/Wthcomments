@@ -84,72 +84,84 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 }
 
 .siri-orb-el {
-  /* dark sphere palette */
-  --bg:    #04020f;
-  --c1:    #00e5ff;   /* bright cyan/aqua */
-  --c2:    #1030ff;   /* vivid blue */
-  --c3:    #ff2010;   /* bright red */
-  --c4:    #00ff88;   /* bright green */
-  --c-mag: #ff00cc;   /* magenta */
-  --orb-speed: 16s;
+  /* Siri sphere palette — deep indigo base, NOT black */
+  --bg:    #06032a;
+  --c1:    #28e8ff;   /* vivid cyan/aqua */
+  --c2:    #4820ff;   /* blue-violet */
+  --c3:    #ff1888;   /* hot pink */
+  --c4:    #18f0a0;   /* teal-green */
+  --c-mag: #c800ff;   /* violet-magenta */
+  --orb-speed: 14s;
 
   display: grid;
   grid-template-areas: "stack";
   border-radius: 50%;
   overflow: hidden;
   position: relative;
-  background: var(--bg);
-  /* CSS box-shadow glow matching the internal colours */
+  /* Rich indigo sphere — bright centre, dark edges */
+  background: radial-gradient(circle at 45% 40%, #1c0e8a 0%, #0c0660 38%, #06032a 80%);
+  /* White chrome rim + violet/blue outer glow — the #1 Siri quality marker */
   box-shadow:
-    0 0 0 1px rgba(63,212,244,0.12),
-    0 0 28px 4px  rgba(63,212,244,0.28),
-    0 0 60px 14px rgba(160,64,232,0.18),
-    0 0 90px 28px rgba(240,48,110,0.10);
+    0 0 0 3px rgba(255,255,255,0.82),
+    0 0 0 5.5px rgba(190,170,230,0.45),
+    0 0 22px 6px  rgba(90,40,210,0.60),
+    0 0 52px 16px rgba(60,35,185,0.32),
+    0 0 88px 30px rgba(35,20,150,0.16);
   transition: box-shadow 0.6s ease;
 }
 
-/* ── spinning conic streams — the light ribbons ── */
+/* ── silk light ribbons — like real Siri ── */
 .siri-orb-el::before {
   content: "";
   display: block;
   grid-area: stack;
   width: 100%; height: 100%;
   border-radius: 50%;
-  /* clip-path hard-clips AFTER the filter so blur never bleeds into a square */
   clip-path: circle(50% at 50% 50%);
   background:
-    /* red/orange wide blob — top */
-    conic-gradient(from calc(var(--orb-angle) * -1.0) at 55% 8%,
+    /* Cyan/white main ribbon A — sweeps through centre both ways */
+    conic-gradient(from calc(var(--orb-angle) * 1.1) at 50% 47%,
       transparent 0deg,
-      var(--c3) 10deg, var(--c3) 155deg,
-      transparent 215deg, transparent 360deg),
-    /* magenta wide blob — upper-left */
-    conic-gradient(from calc(var(--orb-angle) * -1.6) at 15% 20%,
+      var(--c1) 3deg, rgba(160,250,255,0.98) 8deg, var(--c1) 13deg,
+      transparent 22deg,
+      transparent 176deg,
+      var(--c1) 179deg, rgba(160,250,255,0.85) 184deg, var(--c1) 189deg,
+      transparent 198deg, transparent 360deg),
+    /* Cyan ribbon B — secondary, offset 25deg, slightly wider */
+    conic-gradient(from calc(var(--orb-angle) * 1.1 + 25deg) at 50% 47%,
       transparent 0deg,
-      var(--c-mag) 20deg, var(--c-mag) 165deg,
-      transparent 225deg, transparent 360deg),
-    /* large cyan blob — left-centre sweeping to bottom */
-    conic-gradient(from calc(var(--orb-angle) *  1.3) at 32% 68%,
+      rgba(80,220,255,0.60) 4deg, rgba(200,255,255,0.75) 10deg, rgba(80,220,255,0.60) 16deg,
+      transparent 25deg, transparent 360deg),
+    /* Pink/magenta ribbon — counter-sweeps */
+    conic-gradient(from calc(var(--orb-angle) * -0.80 + 55deg) at 50% 47%,
       transparent 0deg,
-      var(--c1) 0deg, var(--c1) 205deg,
-      transparent 265deg, transparent 360deg),
-    /* blue — centre-left */
-    conic-gradient(from calc(var(--orb-angle) * -0.7) at 22% 50%,
+      var(--c3) 3deg, rgba(255,130,190,0.92) 8deg, var(--c3) 13deg,
+      transparent 21deg,
+      transparent 177deg,
+      var(--c3) 180deg, rgba(255,110,175,0.78) 185deg, var(--c3) 190deg,
+      transparent 199deg, transparent 360deg),
+    /* Green ribbon — offset, slower */
+    conic-gradient(from calc(var(--orb-angle) * 1.35 + 95deg) at 53% 50%,
       transparent 0deg,
-      var(--c2) 30deg, var(--c2) 190deg,
-      transparent 250deg, transparent 360deg),
-    /* green wide blob — right side */
-    conic-gradient(from calc(var(--orb-angle) *  1.9) at 74% 48%,
+      var(--c4) 3deg, rgba(120,255,190,0.90) 9deg, var(--c4) 15deg,
+      transparent 23deg, transparent 360deg),
+    /* Violet accent ribbon — fast counter */
+    conic-gradient(from calc(var(--orb-angle) * -1.20 + 140deg) at 47% 46%,
       transparent 0deg,
-      var(--c4) 30deg, var(--c4) 215deg,
-      transparent 278deg, transparent 360deg),
-    /* bright blue-purple base — eliminates all black voids */
-    radial-gradient(circle at 48% 52%, #180ab8 0%, #07042a 62%, var(--bg) 100%);
-  filter: blur(22px) contrast(5);
+      var(--c-mag) 2deg, rgba(220,120,255,0.72) 7deg, var(--c-mag) 12deg,
+      transparent 19deg, transparent 360deg),
+    /* Ambient glow blobs — fill the sphere with rich colour between ribbons */
+    radial-gradient(ellipse at 38% 35%, rgba(80,30,240,0.65) 0%, transparent 52%),
+    radial-gradient(ellipse at 65% 62%, rgba(25,90,230,0.58) 0%, transparent 48%),
+    radial-gradient(ellipse at 50% 18%, rgba(200,15,110,0.42) 0%, transparent 42%),
+    radial-gradient(ellipse at 72% 38%, rgba(10,180,120,0.35) 0%, transparent 40%),
+    /* Deep indigo sphere base — bright indigo centre, dark edges */
+    radial-gradient(circle at 46% 43%, #2212cc 0%, #100878 40%, #060435 68%, var(--bg) 100%);
+  filter: blur(9px) contrast(7) brightness(1.45);
   animation: orbSpin var(--orb-speed) linear infinite;
 }
 
-/* ── glass overlay — depth vignette + specular highlight ── */
+/* ── glass sphere — crisp specular + deep 3D vignette ── */
 .siri-orb-el::after {
   content: "";
   display: block;
@@ -157,12 +169,20 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
   width: 100%; height: 100%;
   border-radius: 50%;
   background:
-    /* bright glass crescent, top-left */
-    radial-gradient(circle at 30% 26%, rgba(255,255,255,0.80) 0%, rgba(255,255,255,0.0) 18%),
-    /* tiny sharp glint */
-    radial-gradient(circle at 34% 22%, rgba(255,255,255,0.55) 0%, transparent 7%),
-    /* edge depth vignette */
-    radial-gradient(circle at 50% 50%, transparent 32%, rgba(0,0,0,0.88) 100%);
+    /* Primary specular — bright white crescent, upper area */
+    radial-gradient(circle at 37% 27%, rgba(255,255,255,0.96) 0%, rgba(255,255,255,0.55) 5%, rgba(255,255,255,0) 17%),
+    /* Secondary tight glint — the sharp catch-light */
+    radial-gradient(circle at 41% 23%, rgba(255,255,255,0.78) 0%, transparent 6%),
+    /* Subtle centre convergence halo (where ribbons meet) */
+    radial-gradient(circle at 50% 46%, rgba(255,255,255,0.15) 0%, transparent 20%),
+    /* THE 3D SPHERE VIGNETTE — multi-stop, goes to near-black at rim */
+    radial-gradient(circle at 50% 50%,
+      transparent 20%,
+      rgba(4,2,18,0.18) 38%,
+      rgba(3,1,14,0.52) 55%,
+      rgba(2,1,10,0.80) 70%,
+      rgba(1,0,7,0.95)  83%,
+      #030115          100%);
 }
 
 @keyframes orbSpin {
@@ -173,10 +193,11 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 .siri-orb-el[data-state="thinking"] {
   --orb-speed: 4s;
   box-shadow:
-    0 0 0 1px rgba(140,190,255,0.20),
-    0 0 30px 6px  rgba(140,190,255,0.38),
-    0 0 65px 18px rgba(160,64,232,0.22),
-    0 0 95px 32px rgba(240,48,110,0.12);
+    0 0 0 3px rgba(255,255,255,0.90),
+    0 0 0 5.5px rgba(200,185,240,0.52),
+    0 0 28px 8px  rgba(100,50,220,0.68),
+    0 0 58px 20px rgba(70,40,200,0.40),
+    0 0 100px 40px rgba(40,25,165,0.22);
 }
 .siri-orb-el[data-state="typing"] {
   --orb-speed: 8s;
@@ -184,10 +205,11 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 .siri-orb-el[data-state="answering"] {
   --orb-speed: 9s;
   box-shadow:
-    0 0 0 1px rgba(63,212,244,0.18),
-    0 0 32px 8px  rgba(63,212,244,0.40),
-    0 0 70px 22px rgba(160,64,232,0.20),
-    0 0 100px 38px rgba(240,48,110,0.12);
+    0 0 0 3px rgba(255,255,255,0.86),
+    0 0 0 5.5px rgba(185,170,235,0.48),
+    0 0 25px 7px  rgba(90,40,210,0.62),
+    0 0 55px 18px rgba(60,35,188,0.34),
+    0 0 92px 34px rgba(30,20,152,0.18);
 }
 
 /* float animation wrapper  */
