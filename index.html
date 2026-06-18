@@ -85,11 +85,12 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 
 .siri-orb-el {
   /* dark sphere palette */
-  --bg:  #07041a;
-  --c1:  #3fd4f4;   /* bright cyan */
-  --c2:  #a040e8;   /* vivid purple */
-  --c3:  #f0306e;   /* hot pink */
-  --c4:  #20e8a8;   /* teal */
+  --bg:    #04020f;
+  --c1:    #00e5ff;   /* bright cyan/aqua */
+  --c2:    #1030ff;   /* vivid blue */
+  --c3:    #ff2010;   /* bright red */
+  --c4:    #00ff88;   /* bright green */
+  --c-mag: #ff00cc;   /* magenta */
   --orb-speed: 16s;
 
   display: grid;
@@ -114,29 +115,37 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
   grid-area: stack;
   width: 100%; height: 100%;
   border-radius: 50%;
+  /* clip-path hard-clips AFTER the filter so blur never bleeds into a square */
+  clip-path: circle(50% at 50% 50%);
   background:
-    /* pink/magenta stream — counter-rotate fast */
-    conic-gradient(from calc(var(--orb-angle) * -3) at 78% 22%,
-      var(--c3) 0deg, transparent 55deg, transparent 305deg, var(--c3) 360deg),
-    /* purple stream */
-    conic-gradient(from calc(var(--orb-angle) *  2) at 45% 75%,
-      var(--c2) 0deg, transparent 80deg, transparent 280deg, var(--c2) 360deg),
-    /* cyan stream */
-    conic-gradient(from calc(var(--orb-angle) *  2) at 25% 72%,
-      var(--c1) 0deg, transparent 65deg, transparent 295deg, var(--c1) 360deg),
-    /* teal stream */
-    conic-gradient(from calc(var(--orb-angle) * -2) at 82% 12%,
-      var(--c4) 0deg, transparent 60deg, transparent 300deg, var(--c4) 360deg),
-    /* secondary cyan accent */
-    conic-gradient(from calc(var(--orb-angle) *  1) at 20% 80%,
-      var(--c1) 0deg, transparent 50deg, transparent 310deg, var(--c1) 360deg),
-    /* secondary purple accent */
-    conic-gradient(from calc(var(--orb-angle) *  2) at 15%  8%,
-      var(--c2) 0deg, transparent 40deg, transparent 320deg, var(--c2) 360deg),
-    /* dark base so streams glow against dark */
-    radial-gradient(circle at 50% 50%, rgba(18,8,50,0.6) 0%, var(--bg) 100%);
-  box-shadow: inset var(--bg) 0 0 18px 5px;
-  filter: blur(14px) contrast(4);
+    /* red/orange wide blob — top */
+    conic-gradient(from calc(var(--orb-angle) * -1.0) at 55% 8%,
+      transparent 0deg,
+      var(--c3) 10deg, var(--c3) 155deg,
+      transparent 215deg, transparent 360deg),
+    /* magenta wide blob — upper-left */
+    conic-gradient(from calc(var(--orb-angle) * -1.6) at 15% 20%,
+      transparent 0deg,
+      var(--c-mag) 20deg, var(--c-mag) 165deg,
+      transparent 225deg, transparent 360deg),
+    /* large cyan blob — left-centre sweeping to bottom */
+    conic-gradient(from calc(var(--orb-angle) *  1.3) at 32% 68%,
+      transparent 0deg,
+      var(--c1) 0deg, var(--c1) 205deg,
+      transparent 265deg, transparent 360deg),
+    /* blue — centre-left */
+    conic-gradient(from calc(var(--orb-angle) * -0.7) at 22% 50%,
+      transparent 0deg,
+      var(--c2) 30deg, var(--c2) 190deg,
+      transparent 250deg, transparent 360deg),
+    /* green wide blob — right side */
+    conic-gradient(from calc(var(--orb-angle) *  1.9) at 74% 48%,
+      transparent 0deg,
+      var(--c4) 30deg, var(--c4) 215deg,
+      transparent 278deg, transparent 360deg),
+    /* bright blue-purple base — eliminates all black voids */
+    radial-gradient(circle at 48% 52%, #180ab8 0%, #07042a 62%, var(--bg) 100%);
+  filter: blur(22px) contrast(5);
   animation: orbSpin var(--orb-speed) linear infinite;
 }
 
@@ -153,7 +162,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
     /* tiny sharp glint */
     radial-gradient(circle at 34% 22%, rgba(255,255,255,0.55) 0%, transparent 7%),
     /* edge depth vignette */
-    radial-gradient(circle at 50% 50%, transparent 38%, rgba(0,0,0,0.75) 100%);
+    radial-gradient(circle at 50% 50%, transparent 32%, rgba(0,0,0,0.88) 100%);
 }
 
 @keyframes orbSpin {
