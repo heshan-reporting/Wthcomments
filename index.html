@@ -197,6 +197,35 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 }
 .orb-float { animation: orbFloat 5s ease-in-out infinite; }
 
+/* ── GEMINI ANIMATED BACKGROUND ─────────────────────────────────────────── */
+@property --gem-hue {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 168;
+}
+
+.msgs::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 65%;
+  pointer-events: none;
+  background: radial-gradient(ellipse 140% 110% at 50% -15%,
+    hsla(var(--gem-hue), 55%, 84%, 0.70) 0%,
+    hsla(calc(var(--gem-hue) + 28), 48%, 91%, 0.36) 45%,
+    transparent 72%);
+  animation: gemHueCycle 24s linear infinite;
+  z-index: 0;
+}
+
+@keyframes gemHueCycle {
+  0%   { --gem-hue: 168; }
+  25%  { --gem-hue: 22;  }
+  50%  { --gem-hue: 212; }
+  75%  { --gem-hue: 138; }
+  100% { --gem-hue: 168; }
+}
+
 /* ── LAYOUT ──────────────────────────────────────────────────────────────── */
 .app{display:flex;height:100vh;background:var(--bg);position:relative;z-index:1}
 #main-app{display:flex;width:100%;height:100%}
@@ -312,8 +341,8 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 .ch-hdr{
   display:flex;align-items:center;justify-content:space-between;
   padding:0 20px;height:56px;
-  background:rgba(248,249,255,0.95);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
-  border-bottom:1px solid rgba(138,180,248,0.15);flex-shrink:0;z-index:10;position:relative;
+  background:rgba(255,255,255,0.80);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border-bottom:1px solid rgba(0,0,0,0.06);flex-shrink:0;z-index:10;position:relative;
 }
 .ch-title{font-size:14px;font-weight:500;color:#1a1a2e}
 .ch-sub{font-size:11px;color:#8a9a8a;margin-top:1px}
@@ -330,18 +359,16 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 .msgs{flex:1;overflow-y:auto;padding:24px 0 120px;scroll-behavior:smooth;position:relative;z-index:1;background:transparent}
 .msgs::-webkit-scrollbar{width:5px}
 .msgs::-webkit-scrollbar-thumb{background:rgba(0,0,0,.1);border-radius:3px}
-.mwrap{max-width:100%;margin:0;padding:0 28px}
+.mwrap{max-width:100%;margin:0;padding:0 28px;position:relative;z-index:1}
 .msg{display:flex;gap:14px;margin-bottom:20px;animation:mi .2s ease}
 @keyframes mi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .msg.user{flex-direction:row-reverse}
-.mavatar{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;margin-top:2px;overflow:hidden}
-.msg.user .mavatar{background:linear-gradient(135deg,#52B5CA,#8DD4E2);color:white}
-.msg.ai   .mavatar{background:linear-gradient(135deg,#1a1f1a,#2a3a2a);color:#52B5CA;font-size:9px}
-.mbody{max-width:calc(100% - 44px)}
+.mavatar{display:none}
+.mbody{max-width:88%;position:relative;z-index:1}
 .msg.user .mbody{align-items:flex-end;display:flex;flex-direction:column}
-.mbubble{padding:12px 16px;border-radius:18px;font-size:14px;line-height:1.65}
-.msg.user .mbubble{background:linear-gradient(135deg,#52B5CA,#3A9DB5);color:white;border-radius:18px 18px 4px 18px;box-shadow:0 4px 14px rgba(82,181,202,.3)}
-.msg.ai   .mbubble{background:rgba(255,255,255,0.92);border:1px solid rgba(138,180,248,0.18);color:#1a1a2e;border-radius:4px 18px 18px 18px;backdrop-filter:blur(12px);width:100%;box-shadow:0 2px 12px rgba(82,100,200,0.06)}
+.mbubble{padding:12px 16px;border-radius:20px;font-size:14px;line-height:1.65}
+.msg.user .mbubble{background:rgba(255,255,255,0.95);color:#1a1a2e;border-radius:20px 20px 4px 20px;box-shadow:0 1px 6px rgba(0,0,0,0.10);border:1px solid rgba(0,0,0,0.06)}
+.msg.ai   .mbubble{background:transparent;border:none;color:#1a1a2e;border-radius:0;backdrop-filter:none;width:100%;box-shadow:none;padding:8px 0}
 .mtime{font-size:10px;color:rgba(0,0,0,.25);margin-top:4px;padding:0 2px}
 /* AI markdown */
 .msg.ai .mbubble h1,.msg.ai .mbubble h2,.msg.ai .mbubble h3{font-weight:600;margin:12px 0 6px;color:#1a1f1a}
@@ -382,13 +409,13 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 .tool-st.p{color:var(--amb)}.tool-st.ok{color:var(--grn)}.tool-st.er{color:var(--red)}
 .async-badge{background:rgba(192,122,0,.1);border:1px solid rgba(192,122,0,.3);color:var(--amb);font-size:10px;padding:1px 5px;border-radius:4px;font-weight:600}
 /* Thinking */
-.think-ind{display:flex;gap:5px;padding:14px 18px;background:var(--ai-bg);border:1px solid var(--ai-bd);border-radius:4px 18px 18px 18px;width:fit-content;backdrop-filter:blur(10px)}
-.tdot{width:7px;height:7px;background:var(--cmm);border-radius:50%;opacity:.4;animation:bnc 1.4s ease-in-out infinite}
+.think-ind{display:flex;gap:6px;padding:10px 4px;width:fit-content}
+.tdot{width:8px;height:8px;background:#c0c8d8;border-radius:50%;opacity:.5;animation:bnc 1.4s ease-in-out infinite}
 .tdot:nth-child(2){animation-delay:.2s}.tdot:nth-child(3){animation-delay:.4s}
 @keyframes bnc{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-6px);opacity:1}}
 
 /* ── WELCOME ──────────────────────────────────────────────────────────────── */
-.welcome{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100%;padding:24px 32px 160px;text-align:center;position:relative;background:radial-gradient(ellipse 90% 60% at 50% 100%,rgba(138,180,248,0.13) 0%,rgba(103,80,164,0.07) 45%,transparent 70%)}
+.welcome{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100%;padding:24px 32px 160px;text-align:center;position:relative;z-index:1;background:transparent}
 .welcome-content{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;width:100%}
 .cmm-logo-welcome{
   width:280px;display:block;margin:0 auto 24px;
@@ -397,9 +424,9 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
   animation:logoIn .5s ease both;
 }
 @keyframes logoIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
-.welcome-headline{font-size:30px;font-weight:300;color:#1a1a2e;margin-bottom:8px;letter-spacing:-.6px;animation:fadeUp .4s ease .1s both}
-.welcome-headline strong{font-weight:600}
-.welcome-sub{font-size:14px;color:#6a7a9a;max-width:440px;line-height:1.6;margin-bottom:24px;animation:fadeUp .4s ease .15s both}
+.welcome-headline{font-size:28px;font-weight:300;color:#444;margin-bottom:6px;letter-spacing:-.4px;animation:fadeUp .4s ease .1s both}
+.welcome-headline strong{font-weight:600;color:#1a1a2e}
+.welcome-sub{font-size:13px;color:#888;max-width:380px;line-height:1.6;margin-bottom:24px;animation:fadeUp .4s ease .15s both}
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .plat-badges{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:20px;animation:fadeUp .4s ease .2s both}
 .plat-pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:4px 12px;border-radius:20px}
@@ -415,55 +442,39 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 .chip.x:hover{border-color:#8B5CF6;color:#8B5CF6;background:rgba(139,92,246,0.07);transform:translateY(-1px);box-shadow:0 4px 12px rgba(139,92,246,0.12)}
 
 /* ── INPUT — GLASSY WITH VISIBLE TEXT ─────────────────────────────────────── */
-.inp-area{padding:14px 28px 20px;flex-shrink:0;position:relative;z-index:10;background:rgba(248,249,255,0.88);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-top:1px solid rgba(138,180,248,0.10);}
+.inp-area{padding:14px 24px 20px;flex-shrink:0;position:relative;z-index:10;background:rgba(255,255,255,0.75);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid rgba(0,0,0,0.05);}
 .inp-wrap{max-width:100%;margin:0;display:flex;flex-direction:column;gap:7px}
 
-/* ── Animated gradient border — reliable background-size scroll ── */
+/* ── Input pill container ── */
 .inp-pill-border{
   position:relative;
   border-radius:30px;
-  padding:1.5px;
-  background:linear-gradient(90deg,#52B5CA,#7B2FBE,#f72585,#06D6A0,#52B5CA,#7B2FBE,#52B5CA);
-  background-size:400% 100%;
-  animation:borderScroll 3s linear infinite;
-  box-shadow:0 0 18px rgba(82,181,202,0.22),0 0 36px rgba(123,47,190,0.12);
-  transition:box-shadow .3s;
+  background:rgba(255,255,255,0.95);
+  border:1px solid rgba(0,0,0,0.10);
+  box-shadow:0 2px 14px rgba(0,0,0,0.08);
+  transition:box-shadow .2s,border-color .2s;
 }
 .inp-pill-border:focus-within{
-  box-shadow:0 0 26px rgba(82,181,202,0.42),0 0 52px rgba(123,47,190,0.22),0 8px 32px rgba(247,37,133,0.14);
-}
-@keyframes borderScroll{
-  0%   {background-position:0% 50%}
-  100% {background-position:100% 50%}
+  border-color:rgba(0,0,0,0.18);
+  box-shadow:0 4px 20px rgba(0,0,0,0.12);
 }
 
 /* ── Glass inner pill ── */
 .inp-pill{
-  display:flex;align-items:center;gap:8px;
-  background:rgba(253,254,255,0.92);
-  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  display:flex;align-items:center;gap:10px;
+  background:transparent;
   border:none;
   border-radius:28px;
-  padding:10px 10px 10px 14px;
+  padding:10px 12px 10px 10px;
   position:relative;
-  overflow:hidden;
-}
-/* Sweeping glass sheen */
-.inp-pill::before{
-  content:'';
-  position:absolute;top:0;left:-100%;width:60%;height:100%;
-  background:linear-gradient(105deg,transparent,rgba(255,255,255,0.55),transparent);
-  animation:glassSheen 4s ease-in-out infinite;
-  pointer-events:none;
-  border-radius:28px;
-}
-@keyframes glassSheen{
-  0%   {left:-100%;opacity:0}
-  15%  {opacity:1}
-  45%  {left:160%;opacity:0}
-  100% {left:160%;opacity:0}
 }
 
+.inp-plus-btn{width:32px;height:32px;border-radius:50%;background:transparent;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#888;transition:all .15s}
+.inp-plus-btn:hover{background:rgba(0,0,0,0.06);color:#444}
+.inp-plus-btn svg{width:18px;height:18px}
+.inp-mic-btn{width:32px;height:32px;border-radius:50%;background:transparent;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#888;transition:all .15s;flex-shrink:0}
+.inp-mic-btn:hover{background:rgba(0,0,0,0.06);color:#444}
+.inp-mic-btn svg{width:18px;height:18px}
 #msg-inp{
   flex:1;background:transparent;border:none;outline:none;
   font-family:var(--fm);font-size:14px;
@@ -472,9 +483,9 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
   resize:none;min-height:22px;max-height:160px;line-height:1.5;padding:0;
 }
 #msg-inp::placeholder{color:#9aaac0}
-.send-btn{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#52B5CA,#3A9DB5);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px rgba(82,181,202,.4);transition:all .15s}
-.send-btn:hover{transform:scale(1.06);box-shadow:0 4px 14px rgba(82,181,202,.5)}.send-btn:active{transform:scale(.95)}.send-btn:disabled{background:rgba(0,0,0,.1);box-shadow:none;cursor:not-allowed}
-.send-btn svg{width:16px;height:16px;fill:white;margin-left:2px}
+.send-btn{width:36px;height:36px;border-radius:50%;background:#1a73e8;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px rgba(26,115,232,.35);transition:all .15s}
+.send-btn:hover{transform:scale(1.06);box-shadow:0 4px 14px rgba(26,115,232,.45)}.send-btn:active{transform:scale(.95)}.send-btn:disabled{background:rgba(0,0,0,.10);box-shadow:none;cursor:not-allowed}
+.send-btn svg{width:16px;height:16px;fill:white;margin-left:1px}
 .inp-foot{display:flex;align-items:center;justify-content:center;font-size:11px;color:#b0c0b0}
 
 /* ── MODALS ─────────────────────────────────────────────────────────────── */
@@ -666,8 +677,8 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
               <path d="M45 24 C45 24, 33 27, 24 24 C33 21, 45 24, 45 24Z" fill="url(#gstar)"/>
             </svg>
           </div>
-          <div class="welcome-headline">What can I help with?</div>
-          <div class="welcome-sub">Google Ads &middot; Meta Ads &middot; TikTok Ads &middot; LinkedIn Ads &mdash; live data, deep analysis, breakdowns and trends.</div>
+          <div class="welcome-headline">Ask away!</div>
+          <div class="welcome-sub">Google Ads &middot; Meta Ads &middot; TikTok Ads &middot; LinkedIn Ads</div>
           <div class="chip-groups">
             <div>
               <div class="cg-label google">Google Ads</div>
@@ -705,10 +716,16 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
     <div class="inp-wrap">
       <div class="inp-pill-border">
       <div class="inp-pill">
+        <button class="inp-plus-btn" title="Attach" onclick="openSettings()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
         <div class="inp-orb-wrap"><div id="mini-orb" class="siri-orb-el"></div></div>
-        <textarea id="msg-inp" rows="1" placeholder="Ask Gemini about your campaigns&hellip;" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        <textarea id="msg-inp" rows="1" placeholder="Ask Gemini" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        <button class="inp-mic-btn" id="mic-btn" title="Voice input">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M19 10a7 7 0 01-14 0M12 19v3M9 22h6"/></svg>
+        </button>
         <button class="send-btn" id="send-btn" onclick="sendMsg()" title="Send">
-          <svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+          <svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
       </div>
       </div><!-- /inp-pill-border -->
@@ -964,8 +981,8 @@ function welcomeHTML(){
         <path d="M45 24 C45 24, 33 27, 24 24 C33 21, 45 24, 45 24Z" fill="url(#gstar)"/>
       </svg>
     </div>
-    <div class="welcome-headline">What can I help with?</div>
-    <div class="welcome-sub">Google Ads &middot; Meta Ads &middot; TikTok Ads &middot; LinkedIn Ads &mdash; live data, deep analysis, breakdowns and trends.</div>
+    <div class="welcome-headline">Ask away${(typeof currentUser!=='undefined'&&currentUser&&currentUser.given_name)?', '+currentUser.given_name:''}!</div>
+    <div class="welcome-sub">Google Ads &middot; Meta Ads &middot; TikTok Ads &middot; LinkedIn Ads</div>
     <div class="chip-groups">
       <div><div class="cg-label google">Google Ads</div>
       <div class="chips">
