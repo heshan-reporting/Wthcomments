@@ -588,6 +588,11 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 .modal::-webkit-scrollbar,.mbody::-webkit-scrollbar{width:4px}
 .modal::-webkit-scrollbar-thumb,.mbody::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:2px}
 @media(max-width:700px){.sidebar{display:none}.mwrap{padding:0 14px}.inp-area{padding:12px 14px}}
+@media(max-width:700px){
+  .globe-canvas{width:150px;height:150px;margin-left:-75px;top:8px}
+  .welcome{padding:172px 20px 110px}
+  .welcome-headline{font-size:26px}
+}
 
 /* ── INTERACTIVE GLOBE ────────────────────────────────────────────────────── */
 .globe-stage{position:absolute;left:0;right:0;top:56px;height:0;z-index:6;pointer-events:none}
@@ -2454,6 +2459,7 @@ var GlobeFX = (function () {
   var dragging = false, lx = 0, ly = 0, lastDX = 0;
   var state = 'idle', t = 0, winBound = false;
   var kickSpin = 0, pop = 0, party = 0;
+  var ripples = [], tiltX = 0, tiltY = 0, tiltXc = 0, tiltYc = 0, sensorsTried = false;
   var STATE = {
     idle:       { spin: 0.0019, bright: 1.05, pulse: 0.35, hue: 0 },
     typing:     { spin: 0.0044, bright: 1.10, pulse: 0.35, hue: 0 },
@@ -2476,8 +2482,45 @@ var GlobeFX = (function () {
 
   function pos(e) { var p = e.touches ? e.touches[0] : e; return { x: p.clientX, y: p.clientY }; }
 
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+  function toLocal(clientX, clientY) {
+    var rect = cvs.getBoundingClientRect();
+    return { x: (clientX - rect.left) / rect.width * sz, y: (clientY - rect.top) / rect.height * sz };
+  }
+
+  // a touch/tap sends a wave across the surface + a little energy kick
+  function touchReact(L) {
+    if (ripples.length < 6) ripples.push({ x: L.x, y: L.y, r: 0, life: 1 });
+    pop = Math.min(0.26, pop + 0.18);
+    kickSpin = Math.min(0.07, kickSpin + 0.022);
+  }
+
+  // phone motion sensors: tilt to rotate, shake to ripple (asks permission on iOS)
+  function enableSensors() {
+    if (sensorsTried) return; sensorsTried = true;
+    function orient(e) {
+      if (e.gamma == null && e.beta == null) return;
+      tiltY = clamp((e.gamma || 0) / 90 * 0.7, -0.7, 0.7);
+      tiltX = clamp(((e.beta || 0) - 40) / 90 * 0.6, -0.6, 0.6);
+    }
+    function motion(e) {
+      var a = e.accelerationIncludingGravity || e.acceleration; if (!a) return;
+      var m = Math.abs(a.x || 0) + Math.abs(a.y || 0) + Math.abs(a.z || 0);
+      if (m > 32) { touchReact({ x: cx, y: cy }); kickSpin = Math.min(0.09, kickSpin + 0.03); }
+    }
+    try {
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission().then(function (p) { if (p === 'granted') window.addEventListener('deviceorientation', orient); }).catch(function () {});
+      } else if (window.DeviceOrientationEvent) { window.addEventListener('deviceorientation', orient); }
+      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        DeviceMotionEvent.requestPermission().then(function (p) { if (p === 'granted') window.addEventListener('devicemotion', motion); }).catch(function () {});
+      } else if (window.DeviceMotionEvent) { window.addEventListener('devicemotion', motion); }
+    } catch (_) {}
+  }
+
   function bind() {
-    function down(e) { dragging = true; var p = pos(e); lx = p.x; ly = p.y; lastDX = 0; }
+    function down(e) { dragging = true; var p = pos(e); lx = p.x; ly = p.y; lastDX = 0; touchReact(toLocal(p.x, p.y)); enableSensors(); }
     function move(e) {
       if (!dragging) return;
       var p = pos(e), dx = p.x - lx, dy = p.y - ly;
@@ -2512,6 +2555,8 @@ var GlobeFX = (function () {
     raf = requestAnimationFrame(loop);
     if (!cvs || !document.body.contains(cvs)) { raf = null; return; }
     t += 1;
+    tiltXc += (tiltX - tiltXc) * 0.06; tiltYc += (tiltY - tiltYc) * 0.06;
+    for (var ri = ripples.length - 1; ri >= 0; ri--) { var rp = ripples[ri]; rp.r += 3.2; rp.life -= 0.02; if (rp.life <= 0 || rp.r > sz * 0.95) ripples.splice(ri, 1); }
     var s = STATE[state] || STATE.idle;
     if (party > 0) party--;
     if (!dragging) {
@@ -2530,7 +2575,8 @@ var GlobeFX = (function () {
   function draw(s) {
     ctx.setTransform(dprG, 0, 0, dprG, 0, 0);
     ctx.clearRect(0, 0, sz, sz);
-    var cosY = Math.cos(rotY), sinY = Math.sin(rotY), cosX = Math.cos(rotX), sinX = Math.sin(rotX);
+    var erx = rotX + tiltXc, ery = rotY + tiltYc;
+    var cosY = Math.cos(ery), sinY = Math.sin(ery), cosX = Math.cos(erx), sinX = Math.sin(erx);
     var bob = party > 0 ? Math.sin(t * 0.55) * 7 : 0;
     var bounce = party > 0 ? (1 + 0.10 * Math.abs(Math.sin(t * 0.55))) : 1;
     var pulse = (1 + s.pulse * 0.05 * Math.sin(t * 0.11) + pop) * bounce;
@@ -2548,6 +2594,15 @@ var GlobeFX = (function () {
       var q = proj[j];
       var size = 0.5 + q.d * 2.1;
       var a = (0.12 + q.d * 0.88) * (0.55 + 0.45 * s.bright);
+      if (ripples.length) {
+        var wb = 0;
+        for (var rk = 0; rk < ripples.length; rk++) {
+          var rpp = ripples[rk], ddx = q.sx - rpp.x, ddy = q.sy - rpp.y;
+          var dd = Math.sqrt(ddx * ddx + ddy * ddy), df = dd - rpp.r;
+          wb += Math.exp(-(df * df) / 240) * rpp.life;
+        }
+        size += wb * 2.8; a = Math.min(1, a + wb * 0.55);
+      }
       // cyan(0,229,255) -> purple(139,92,246) -> pink(244,114,182) by latitude
       var r = Math.round(0 + q.ty * 244 + hueShift);
       var g = Math.round(229 - q.ty * 130 - (hueShift > 0 ? hueShift : 0));
@@ -2567,6 +2622,17 @@ var GlobeFX = (function () {
     gg.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = gg;
     ctx.beginPath(); ctx.arc(cx, cy, R * 1.15, 0, 6.2832); ctx.fill();
+    if (ripples.length) {
+      ctx.save();
+      ctx.beginPath(); ctx.arc(cx, cy + bob, R * pulse, 0, 6.2832); ctx.clip();
+      for (var rg = 0; rg < ripples.length; rg++) {
+        var rr = ripples[rg];
+        ctx.beginPath(); ctx.arc(rr.x, rr.y, rr.r, 0, 6.2832);
+        ctx.strokeStyle = 'rgba(120,235,255,' + (0.55 * rr.life).toFixed(3) + ')';
+        ctx.lineWidth = 1.6; ctx.stroke();
+      }
+      ctx.restore();
+    }
   }
 
   return {
@@ -2590,9 +2656,14 @@ function setGlobeMode(mode) {
   if (mode === 'dock') {
     st.classList.remove('globe-mode-hero');
     st.classList.add('globe-mode-dock');
-    var w = st.getBoundingClientRect().width || 600;
-    var dx = Math.round(w / 2 - 50);  // hero centre -> top-right
-    cv.style.transform = 'translate(' + dx + 'px,-80px) scale(0.26)';
+    var sw = st.offsetWidth || window.innerWidth;
+    var hw = cv.offsetWidth, hh = cv.offsetHeight;      // layout size, ignores any transform
+    var hcx = cv.offsetLeft + hw / 2, hcy = cv.offsetTop + hh / 2;
+    var dsize = window.innerWidth <= 700 ? 44 : 50;
+    var margin = window.innerWidth <= 700 ? 12 : 24;
+    var dcx = sw - margin - dsize / 2, dcy = 14 + dsize / 2;
+    var dx = Math.round(dcx - hcx), dy = Math.round(dcy - hcy);
+    cv.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(' + (dsize / hw).toFixed(4) + ')';
   } else {
     st.classList.remove('globe-mode-dock');
     st.classList.add('globe-mode-hero');
