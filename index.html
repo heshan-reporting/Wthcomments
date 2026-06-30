@@ -226,10 +226,11 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 }
 .sb-logo{padding:14px 12px 12px;border-bottom:1px solid var(--sb-bd)}
 .sb-logo-card{
-  background:rgba(255,255,255,0.06);border-radius:8px;
-  padding:8px 10px;display:inline-block;border:1px solid var(--border);
+  background:#fff;border-radius:10px;
+  padding:9px 12px;display:inline-block;
+  box-shadow:0 2px 14px rgba(0,0,0,.35),0 0 0 1px rgba(255,255,255,.06);
 }
-.cmm-logo-sb{width:120px;display:block;filter:brightness(0) invert(1) opacity(0.85)}
+.cmm-logo-sb{width:118px;display:block}
 .sb-act{padding:12px}
 .btn-new{
   width:100%;display:flex;align-items:center;gap:8px;padding:9px 12px;
@@ -587,6 +588,81 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 .modal::-webkit-scrollbar,.mbody::-webkit-scrollbar{width:4px}
 .modal::-webkit-scrollbar-thumb,.mbody::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:2px}
 @media(max-width:700px){.sidebar{display:none}.mwrap{padding:0 14px}.inp-area{padding:12px 14px}}
+
+/* ── INTERACTIVE GLOBE ────────────────────────────────────────────────────── */
+.globe-canvas{
+  width:220px;height:220px;display:block;cursor:grab;
+  touch-action:none;
+  filter:drop-shadow(0 0 26px rgba(0,229,255,.28)) drop-shadow(0 0 60px rgba(139,92,246,.20));
+  transition:filter .5s ease;
+}
+.globe-canvas:active{cursor:grabbing}
+
+/* extra mini-orb state variants (searching / analyzing / compiling / responding) */
+#mini-orb.s-searching{animation-duration:1.0s}
+#mini-orb.s-searching{filter:blur(2px) brightness(1.3) saturate(1.4)}
+#mini-orb.s-searching::before{animation-duration:1.8s}
+#mini-orb.s-analyzing{animation-duration:1.4s}
+#mini-orb.s-analyzing{filter:blur(2px) brightness(1.22) saturate(1.5) hue-rotate(20deg)}
+#mini-orb.s-analyzing::before{animation-duration:3s}
+#mini-orb.s-compiling{animation-duration:1.6s}
+#mini-orb.s-compiling{filter:blur(2.2px) brightness(1.16)}
+#mini-orb.s-compiling::before{animation-duration:4.5s}
+#mini-orb.s-responding{animation-duration:2s}
+#mini-orb.s-responding{filter:blur(2.2px) brightness(1.12)}
+#mini-orb.s-responding::before{animation-duration:5.5s}
+
+/* ── MULTI-PHASE AI STATUS CARD ───────────────────────────────────────────── */
+@keyframes spinRing{to{transform:rotate(360deg)}}
+@keyframes corePulse{0%,100%{transform:scale(.72);opacity:.85}50%{transform:scale(1.05);opacity:1}}
+@keyframes barFlow{0%{background-position:200% 0}100%{background-position:-200% 0}}
+@keyframes phaseSwap{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.ai-status{
+  --accent:#8b5cf6;
+  display:inline-flex;align-items:center;gap:12px;
+  background:var(--glass);border:1px solid var(--border);
+  border-left:2px solid var(--accent);
+  border-radius:16px;padding:10px 16px 10px 13px;
+  box-shadow:0 4px 22px rgba(0,0,0,.32);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  transition:border-color .4s ease;
+}
+.ai-status .glyph{position:relative;width:22px;height:22px;flex-shrink:0}
+.ai-status .glyph::before{
+  content:'';position:absolute;inset:0;border-radius:50%;
+  background:conic-gradient(from 0deg,transparent 0deg,var(--accent) 90deg,#00e5ff 200deg,transparent 320deg);
+  -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px));
+  mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px));
+  animation:spinRing 1.6s linear infinite;
+}
+.ai-status .glyph::after{
+  content:'';position:absolute;inset:5px;border-radius:50%;
+  background:radial-gradient(circle at 38% 35%,#fff,var(--accent) 70%);
+  animation:corePulse 1.6s ease-in-out infinite;
+}
+.ai-status .scol{display:flex;flex-direction:column;gap:5px;min-width:120px}
+.ai-status .stxt{
+  font-size:13px;font-weight:600;color:var(--text);letter-spacing:.01em;
+  display:flex;align-items:center;gap:7px;animation:phaseSwap .3s ease;
+}
+.ai-status .ssub{font-size:11px;color:var(--text-2);font-family:var(--fmono)}
+.ai-status .sbar{
+  height:3px;border-radius:2px;overflow:hidden;
+  background:linear-gradient(90deg,transparent,var(--accent),#00e5ff,var(--accent),transparent);
+  background-size:200% 100%;animation:barFlow 1.4s linear infinite;opacity:.8;
+}
+/* phase accents + tempo */
+.ai-status.phase-thinking  {--accent:#8b5cf6}
+.ai-status.phase-thinking   .glyph::before{animation-duration:2.2s}
+.ai-status.phase-searching {--accent:#00e5ff}
+.ai-status.phase-searching  .glyph::before{animation-duration:.9s}
+.ai-status.phase-searching  .sbar{animation-duration:.8s}
+.ai-status.phase-analyzing {--accent:#f472b6}
+.ai-status.phase-analyzing  .glyph::before{animation-duration:1.3s}
+.ai-status.phase-compiling {--accent:#22d3ee}
+.ai-status.phase-compiling  .glyph::before{animation-duration:1.7s}
+.ai-status.phase-responding{--accent:#a855f7}
+.ai-status.phase-responding .glyph::before{animation-duration:2.4s}
 </style>
 </head>
 <body>
@@ -680,7 +756,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
       <div class="welcome" id="welcome">
         <div class="welcome-content">
           <div class="orb-container">
-            <div id="orb-canvas"></div>
+            <canvas id="globe-canvas" class="globe-canvas" width="440" height="440" aria-label="CMM AI"></canvas>
             <svg width="40" height="40" viewBox="0 0 48 48" class="gemini-star" aria-label="CMM AI">
               <defs>
                 <linearGradient id="gstar" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -964,6 +1040,7 @@ function newChat(){
   document.getElementById('mwrap').innerHTML=welcomeHTML();
   document.getElementById('ch-title').textContent='New conversation';
   renderSb();
+  if(window.GlobeFX)GlobeFX.remount();
 }
 function loadCv(id){
   const c=convos.find(x=>x.id===id);if(!c)return;
@@ -984,7 +1061,7 @@ function welcomeHTML(){
   return`<div class="welcome" id="welcome">
   <div class="welcome-content">
     <div class="orb-container">
-      <div id="orb-canvas"></div>
+      <canvas id="globe-canvas" class="globe-canvas" width="440" height="440" aria-label="CMM AI"></canvas>
       <svg width="40" height="40" viewBox="0 0 48 48" class="gemini-star" aria-label="CMM AI">
         <defs>
           <linearGradient id="gstar" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -1483,7 +1560,7 @@ let busy=false;
 async function ask(userMsg){
   if(!cfg.key){appendMsg('ai','⚠️ No AI API key configured. Open **Configuration** to add your key.');return}
   hist.push({role:'user',content:userMsg});
-  const thk=appendThink();setBusy(true);
+  const status=appendStatus();setBusy(true);
 
   if(!aid){
     aid='c_'+Date.now();
@@ -1494,8 +1571,10 @@ async function ask(userMsg){
   }
 
   try{
-    let loop=true;
+    let loop=true,iter=0;
     while(loop){
+      iter++;
+      status.phase(iter===1?'thinking':'analyzing');
       const res=await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
         headers:{
@@ -1515,28 +1594,29 @@ async function ask(userMsg){
 
       if(!res.ok){
         const e=await res.text();
-        try{thk.remove()}catch(_){}
+        status.remove();
         appendMsg('ai',`**API Error ${res.status}:** ${e.slice(0,300)}`);
         loop=false;break;
       }
 
       const data=await res.json();
-      try{thk.remove()}catch(_){}
 
       const uses=[],results=[];
 
       for(const blk of data.content){
-        if(blk.type==='text'&&blk.text.trim())appendMsg('ai',blk.text);
+        if(blk.type==='text'&&blk.text.trim()){status.phase('responding');appendMsg('ai',blk.text);}
         if(blk.type==='tool_use')uses.push(blk);
       }
 
       hist.push({role:'assistant',content:data.content});
 
       if(uses.length){
+        status.phase('searching');
         for(const t of uses){
           let r;
           if(t.name==='query_google_ads'){
             const{gaql,description}=t.input;
+            status.phase('searching','Google Ads');
             const card=appendToolCard('google',description,gaql.slice(0,100)+(gaql.length>100?'…':''));
             r=await googleQuery(gaql);
             if(r.error){card.err('Failed')}
@@ -1554,6 +1634,7 @@ async function ask(userMsg){
           } else if(t.name==='query_meta_ads'){
             const{path,params,useAsync,description}=t.input;
             const detail=`${path} · ${Object.entries(params||{}).slice(0,3).map(([k,v])=>`${k}=${v}`).join(', ')}`;
+            status.phase('searching','Meta Ads');
             const card=appendToolCard('meta',description,detail,useAsync);
             r=await metaQuery(path,params,useAsync);
             if(r.error){card.err('Failed')}
@@ -1572,6 +1653,7 @@ async function ask(userMsg){
           } else if(t.name==='query_tiktok_ads'){
             const inp=t.input;
             const detail=`${inp.action||'report'} · ${(inp.dimensions||inp.metrics||[]).slice(0,3).join(', ')}`;
+            status.phase('searching','TikTok Ads');
             const card=appendToolCard('tiktok',inp.description||'TikTok query',detail);
             r=await tiktokQuery(inp);
             if(r.error){card.err('Failed')}
@@ -1597,10 +1679,11 @@ async function ask(userMsg){
       if(data.stop_reason==='end_turn'&&!uses.length)loop=false;
     }
   }catch(e){
-    try{thk.remove()}catch(_){}
+    status.remove();
     appendMsg('ai',`**Network error:** ${e.message}`);
   }
 
+  status.remove();
   const c=convos.find(x=>x.id===aid);
   if(c){c.history=hist;c.ts=Date.now()}
   storeConvos();setBusy(false);
@@ -2351,13 +2434,12 @@ requestAnimationFrame(siriAnimLoop);
 
 function updateOrbState(state) {
   siriState = state;
-  var cls = 's-' + state;
-  ['orb-canvas', 'mini-orb'].forEach(function(id) {
-    var el = document.getElementById(id);
-    if (!el) return;
-    el.classList.remove('s-idle', 's-typing', 's-thinking', 's-answering');
-    el.classList.add(cls);
-  });
+  var mo = document.getElementById('mini-orb');
+  if (mo) {
+    mo.className = mo.className.replace(/\bs-[a-z]+\b/g, '').replace(/\s+/g, ' ').trim();
+    mo.classList.add('s-' + state);
+  }
+  if (window.GlobeFX) GlobeFX.setState(state);
 }
 
 // ── Typing state hook
@@ -2365,29 +2447,181 @@ document.addEventListener('DOMContentLoaded', function() {
   var inp = document.getElementById('msg-inp');
   if (inp) {
     inp.addEventListener('input', function() {
-      siriState = 'typing';
+      if (busy) return;
       updateOrbState('typing');
       clearTimeout(_typingTimer);
       _typingTimer = setTimeout(function() {
-        if (siriState === 'typing') { siriState = 'idle'; updateOrbState('idle'); }
-      }, 2000);
+        if (siriState === 'typing') updateOrbState('idle');
+      }, 1800);
     });
   }
 });
 
-// ── setBusy wrapper — hook thinking/answering states
+// ── setBusy wrapper — return orb/globe to idle when a turn finishes ──────────
 var _origSetBusy = typeof setBusy === 'function' ? setBusy : null;
 if (_origSetBusy) {
   setBusy = function(b) {
     _origSetBusy(b);
-    siriState = b ? 'thinking' : 'answering';
-    updateOrbState(siriState);
-    if (!b) {
-      setTimeout(function() {
-        if (siriState === 'answering') { siriState = 'idle'; updateOrbState('idle'); }
-      }, 3500);
-    }
+    if (!b) setTimeout(function() { if (!busy) updateOrbState('idle'); }, 1200);
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INTERACTIVE LIVING GLOBE — fibonacci-sphere point cloud, drag to rotate,
+// auto-rotates, and reacts to the AI's current phase (speed / brightness / hue).
+// ─────────────────────────────────────────────────────────────────────────────
+var GlobeFX = (function () {
+  var pts = [], N = 640, R, cx, cy, sz = 220, dprG = 1;
+  var cvs = null, ctx = null, raf = null;
+  var rotY = 0.6, rotX = -0.32, spinExtra = 0;
+  var dragging = false, lx = 0, ly = 0, lastDX = 0;
+  var state = 'idle', t = 0, winBound = false;
+  var STATE = {
+    idle:       { spin: 0.0016, bright: 1.00, pulse: 0.00, hue: 0 },
+    typing:     { spin: 0.0044, bright: 1.10, pulse: 0.35, hue: 0 },
+    thinking:   { spin: 0.0030, bright: 1.14, pulse: 0.55, hue: 18 },
+    searching:  { spin: 0.0140, bright: 1.34, pulse: 0.75, hue: 0 },
+    analyzing:  { spin: 0.0070, bright: 1.24, pulse: 0.95, hue: 42 },
+    compiling:  { spin: 0.0050, bright: 1.18, pulse: 0.60, hue: -12 },
+    responding: { spin: 0.0036, bright: 1.14, pulse: 0.45, hue: -22 },
+    answering:  { spin: 0.0036, bright: 1.14, pulse: 0.45, hue: -22 }
+  };
+
+  function build() {
+    pts = [];
+    var off = 2 / N, inc = Math.PI * (3 - Math.sqrt(5));
+    for (var i = 0; i < N; i++) {
+      var y = i * off - 1 + off / 2, r = Math.sqrt(Math.max(0, 1 - y * y)), phi = i * inc;
+      pts.push({ x: Math.cos(phi) * r, y: y, z: Math.sin(phi) * r });
+    }
+  }
+
+  function pos(e) { var p = e.touches ? e.touches[0] : e; return { x: p.clientX, y: p.clientY }; }
+
+  function bind() {
+    function down(e) { dragging = true; var p = pos(e); lx = p.x; ly = p.y; lastDX = 0; }
+    function move(e) {
+      if (!dragging) return;
+      var p = pos(e), dx = p.x - lx, dy = p.y - ly;
+      rotY += dx * 0.009; rotX += dy * 0.009;
+      rotX = Math.max(-1.4, Math.min(1.4, rotX));
+      lastDX = dx; lx = p.x; ly = p.y;
+    }
+    function up() { if (dragging) { dragging = false; spinExtra = Math.max(-0.06, Math.min(0.06, lastDX * 0.004)); } }
+    cvs.addEventListener('mousedown', down);
+    cvs.addEventListener('touchstart', down, { passive: true });
+    cvs.addEventListener('touchmove', function (e) { move(e); }, { passive: true });
+    cvs.addEventListener('touchend', up);
+    if (!winBound) {
+      window.addEventListener('mousemove', move);
+      window.addEventListener('mouseup', up);
+      winBound = true;
+    }
+  }
+
+  function mount(canvas) {
+    if (!canvas) return;
+    cvs = canvas; ctx = cvs.getContext('2d');
+    dprG = Math.min(window.devicePixelRatio || 1, 2);
+    sz = 220; cvs.width = cvs.height = sz * dprG;
+    cx = cy = sz / 2; R = sz * 0.40;
+    if (!pts.length) build();
+    if (!cvs._bound) { bind(); cvs._bound = true; }
+    if (!raf) loop();
+  }
+
+  function loop() {
+    raf = requestAnimationFrame(loop);
+    if (!cvs || !document.body.contains(cvs)) { raf = null; return; }
+    t += 1;
+    var s = STATE[state] || STATE.idle;
+    if (!dragging) { rotY += s.spin + spinExtra; spinExtra *= 0.96; }
+    draw(s);
+  }
+
+  function draw(s) {
+    ctx.setTransform(dprG, 0, 0, dprG, 0, 0);
+    ctx.clearRect(0, 0, sz, sz);
+    var cosY = Math.cos(rotY), sinY = Math.sin(rotY), cosX = Math.cos(rotX), sinX = Math.sin(rotX);
+    var pulse = 1 + s.pulse * 0.05 * Math.sin(t * 0.11);
+    var hueShift = s.hue;
+    // back-to-front for nicer overlap
+    var proj = [];
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i];
+      var x1 = p.x * cosY - p.z * sinY, z1 = p.x * sinY + p.z * cosY;
+      var y1 = p.y * cosX - z1 * sinX, z2 = p.y * sinX + z1 * cosX;
+      proj.push({ sx: cx + x1 * R * pulse, sy: cy + y1 * R * pulse, d: (z2 + 1) / 2, ty: (p.y + 1) / 2 });
+    }
+    proj.sort(function (a, b) { return a.d - b.d; });
+    for (var j = 0; j < proj.length; j++) {
+      var q = proj[j];
+      var size = 0.5 + q.d * 2.1;
+      var a = (0.12 + q.d * 0.88) * (0.55 + 0.45 * s.bright);
+      // cyan(0,229,255) -> purple(139,92,246) -> pink(244,114,182) by latitude
+      var r = Math.round(0 + q.ty * 244 + hueShift);
+      var g = Math.round(229 - q.ty * 130 - (hueShift > 0 ? hueShift : 0));
+      var b = Math.round(255 - q.ty * 78);
+      r = Math.max(0, Math.min(255, r)); g = Math.max(0, Math.min(255, g)); b = Math.max(0, Math.min(255, b));
+      ctx.beginPath();
+      ctx.arc(q.sx, q.sy, size, 0, 6.2832);
+      ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',' + a.toFixed(3) + ')';
+      ctx.fill();
+    }
+    var gg = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.15);
+    gg.addColorStop(0, 'rgba(150,140,255,' + (0.12 * s.bright).toFixed(3) + ')');
+    gg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gg;
+    ctx.beginPath(); ctx.arc(cx, cy, R * 1.15, 0, 6.2832); ctx.fill();
+  }
+
+  return {
+    mount: mount,
+    setState: function (x) { state = x; },
+    remount: function () { var c = document.getElementById('globe-canvas'); if (c) mount(c); }
+  };
+})();
+
+// Mount the globe on load and whenever the welcome screen is (re)built.
+document.addEventListener('DOMContentLoaded', function () { GlobeFX.remount(); });
+setTimeout(function () { GlobeFX.remount(); }, 200);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MULTI-PHASE AI STATUS CARD — one live indicator that walks through the
+// pipeline: thinking → searching → analyzing → compiling → responding.
+// ─────────────────────────────────────────────────────────────────────────────
+var AI_PHASES = {
+  thinking:   { label: 'Thinking',        sub: 'reasoning about your question' },
+  searching:  { label: 'Searching',       sub: 'fetching live ad data' },
+  analyzing:  { label: 'Analyzing data',  sub: 'crunching the numbers' },
+  compiling:  { label: 'Compiling answer',sub: 'structuring the insights' },
+  responding: { label: 'Responding',      sub: 'writing it up' }
+};
+function appendStatus() {
+  removeWelcome();
+  var w = getMwrap();
+  var el = document.createElement('div'); el.className = 'msg ai';
+  el.innerHTML =
+    '<div class="ai-av mavatar"><div class="msg-orb"></div></div>' +
+    '<div class="mbody"><div class="ai-status phase-thinking">' +
+      '<div class="glyph"></div>' +
+      '<div class="scol">' +
+        '<div class="stxt"></div>' +
+        '<div class="sbar"></div>' +
+      '</div>' +
+    '</div></div>';
+  w.appendChild(el); scrollBot();
+  var card = el.querySelector('.ai-status');
+  var txt = el.querySelector('.stxt');
+  function phase(name, detail) {
+    var ph = AI_PHASES[name] || AI_PHASES.thinking;
+    card.className = 'ai-status phase-' + name;
+    txt.textContent = ph.label + ' · ' + (detail || ph.sub);
+    updateOrbState(name);
+    scrollBot();
+  }
+  phase('thinking');
+  return { el: el, phase: phase, remove: function () { try { el.remove(); } catch (_) {} } };
 }
 
 
