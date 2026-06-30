@@ -507,6 +507,21 @@ body::after{background:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmln
 </head>
 <body>
 
+<!-- Kill any stale cache-first service worker from a previous PWA build -->
+<script>
+(function(){
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations()
+      .then(function(rs){ rs.forEach(function(r){ r.unregister(); }); })
+      .catch(function(){});
+  }
+  if (window.caches && caches.keys) {
+    caches.keys().then(function(ks){ ks.forEach(function(k){ caches.delete(k); }); })
+      .catch(function(){});
+  }
+})();
+</script>
+
 <!-- OAuth redirect handler -->
 <script>
 (function(){
