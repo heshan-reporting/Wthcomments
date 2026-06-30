@@ -411,8 +411,8 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 
 /* ── WELCOME ──────────────────────────────────────────────────────────────── */
 .welcome{
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  min-height:100%;padding:20px 32px 120px;text-align:center;
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+  min-height:100%;padding:248px 32px 120px;text-align:center;
   position:relative;z-index:1;background:transparent;
 }
 .welcome-content{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;width:100%}
@@ -590,13 +590,16 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 @media(max-width:700px){.sidebar{display:none}.mwrap{padding:0 14px}.inp-area{padding:12px 14px}}
 
 /* ── INTERACTIVE GLOBE ────────────────────────────────────────────────────── */
+.globe-stage{position:absolute;left:0;right:0;top:56px;height:0;z-index:6;pointer-events:none}
 .globe-canvas{
-  width:220px;height:220px;display:block;cursor:grab;
-  touch-action:none;
-  filter:drop-shadow(0 0 26px rgba(0,229,255,.28)) drop-shadow(0 0 60px rgba(139,92,246,.20));
-  transition:filter .5s ease;
+  position:absolute;left:50%;top:16px;width:210px;height:210px;margin-left:-105px;
+  display:block;cursor:grab;touch-action:none;transform-origin:center center;
+  filter:drop-shadow(0 0 26px rgba(0,229,255,.30)) drop-shadow(0 0 60px rgba(139,92,246,.22));
+  transition:transform .8s cubic-bezier(.2,.85,.25,1),filter .5s ease;
+  pointer-events:auto;
 }
 .globe-canvas:active{cursor:grabbing}
+.globe-mode-dock .globe-canvas{cursor:pointer}
 
 /* extra mini-orb state variants (searching / analyzing / compiling / responding) */
 #mini-orb.s-searching{animation-duration:1.0s}
@@ -751,26 +754,13 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
     </div>
   </div>
 
+  <!-- Persistent living globe (transforms hero<->dock) -->
+  <div class="globe-stage globe-mode-hero" id="globe-stage"><canvas id="globe-canvas" class="globe-canvas" width="440" height="440" aria-label="CMM AI"></canvas></div>
+
   <div class="msgs" id="msgs">
     <div class="mwrap" id="mwrap">
       <div class="welcome" id="welcome">
         <div class="welcome-content">
-          <div class="orb-container">
-            <canvas id="globe-canvas" class="globe-canvas" width="440" height="440" aria-label="CMM AI"></canvas>
-            <svg width="40" height="40" viewBox="0 0 48 48" class="gemini-star" aria-label="CMM AI">
-              <defs>
-                <linearGradient id="gstar" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" style="stop-color:#52B5CA"/>
-                  <stop offset="50%" style="stop-color:#7B2FBE"/>
-                  <stop offset="100%" style="stop-color:#f72585"/>
-                </linearGradient>
-              </defs>
-              <path d="M24 3 C24 3, 27 15, 24 24 C21 15, 24 3, 24 3Z" fill="url(#gstar)"/>
-              <path d="M24 45 C24 45, 21 33, 24 24 C27 33, 24 45, 24 45Z" fill="url(#gstar)"/>
-              <path d="M3 24 C3 24, 15 21, 24 24 C15 27, 3 24, 3 24Z" fill="url(#gstar)"/>
-              <path d="M45 24 C45 24, 33 27, 24 24 C33 21, 45 24, 45 24Z" fill="url(#gstar)"/>
-            </svg>
-          </div>
           <div class="welcome-headline">Ask away!</div>
           <div class="welcome-sub">Google Ads &middot; Meta Ads &middot; TikTok Ads &middot; LinkedIn Ads</div>
           <div class="chip-groups">
@@ -1040,7 +1030,7 @@ function newChat(){
   document.getElementById('mwrap').innerHTML=welcomeHTML();
   document.getElementById('ch-title').textContent='New conversation';
   renderSb();
-  if(window.GlobeFX)GlobeFX.remount();
+  if(typeof setGlobeMode==='function')setGlobeMode('hero');
 }
 function loadCv(id){
   const c=convos.find(x=>x.id===id);if(!c)return;
@@ -1052,6 +1042,7 @@ function loadCv(id){
     else if(m.role==='assistant'){const bs=Array.isArray(m.content)?m.content:[{type:'text',text:m.content}];bs.forEach(b=>{if(b.type==='text'&&b.text.trim())appendMsg('ai',b.text,false)})}
   });
   renderSb();scrollBot();
+  if(typeof setGlobeMode==='function')setGlobeMode('dock');
 }
 function delCv(e,id){e.stopPropagation();convos=convos.filter(c=>c.id!==id);storeConvos();if(aid===id)newChat();renderSb()}
 function clearChat(){if(aid){convos=convos.filter(c=>c.id!==aid);storeConvos()}newChat()}
@@ -1060,22 +1051,6 @@ function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').repl
 function welcomeHTML(){
   return`<div class="welcome" id="welcome">
   <div class="welcome-content">
-    <div class="orb-container">
-      <canvas id="globe-canvas" class="globe-canvas" width="440" height="440" aria-label="CMM AI"></canvas>
-      <svg width="40" height="40" viewBox="0 0 48 48" class="gemini-star" aria-label="CMM AI">
-        <defs>
-          <linearGradient id="gstar" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:#52B5CA"/>
-            <stop offset="50%" style="stop-color:#7B2FBE"/>
-            <stop offset="100%" style="stop-color:#f72585"/>
-          </linearGradient>
-        </defs>
-        <path d="M24 3 C24 3, 27 15, 24 24 C21 15, 24 3, 24 3Z" fill="url(#gstar)"/>
-        <path d="M24 45 C24 45, 21 33, 24 24 C27 33, 24 45, 24 45Z" fill="url(#gstar)"/>
-        <path d="M3 24 C3 24, 15 21, 24 24 C15 27, 3 24, 3 24Z" fill="url(#gstar)"/>
-        <path d="M45 24 C45 24, 33 27, 24 24 C33 21, 45 24, 45 24Z" fill="url(#gstar)"/>
-      </svg>
-    </div>
     <div class="welcome-headline">Ask away${(typeof currentUser!=='undefined'&&currentUser&&currentUser.given_name)?', '+currentUser.given_name:''}!</div>
     <div class="welcome-sub">Google Ads &middot; Meta Ads &middot; TikTok Ads &middot; LinkedIn Ads</div>
     <div class="chip-groups">
@@ -1560,7 +1535,7 @@ let busy=false;
 async function ask(userMsg){
   if(!cfg.key){appendMsg('ai','⚠️ No AI API key configured. Open **Configuration** to add your key.');return}
   hist.push({role:'user',content:userMsg});
-  const status=appendStatus();setBusy(true);
+  const status=appendStatus();setBusy(true);if(typeof setGlobeMode==='function')setGlobeMode('dock');
 
   if(!aid){
     aid='c_'+Date.now();
@@ -1684,6 +1659,7 @@ async function ask(userMsg){
   }
 
   status.remove();
+  if(window.GlobeFX)GlobeFX.celebrate();
   const c=convos.find(x=>x.id===aid);
   if(c){c.history=hist;c.ts=Date.now()}
   storeConvos();setBusy(false);
@@ -2449,6 +2425,7 @@ document.addEventListener('DOMContentLoaded', function() {
     inp.addEventListener('input', function() {
       if (busy) return;
       updateOrbState('typing');
+      if (window.GlobeFX) GlobeFX.kick();
       clearTimeout(_typingTimer);
       _typingTimer = setTimeout(function() {
         if (siriState === 'typing') updateOrbState('idle');
@@ -2476,6 +2453,7 @@ var GlobeFX = (function () {
   var rotY = 0.6, rotX = -0.32, spinExtra = 0;
   var dragging = false, lx = 0, ly = 0, lastDX = 0;
   var state = 'idle', t = 0, winBound = false;
+  var kickSpin = 0, pop = 0, party = 0;
   var STATE = {
     idle:       { spin: 0.0016, bright: 1.00, pulse: 0.00, hue: 0 },
     typing:     { spin: 0.0044, bright: 1.10, pulse: 0.35, hue: 0 },
@@ -2535,7 +2513,9 @@ var GlobeFX = (function () {
     if (!cvs || !document.body.contains(cvs)) { raf = null; return; }
     t += 1;
     var s = STATE[state] || STATE.idle;
-    if (!dragging) { rotY += s.spin + spinExtra; spinExtra *= 0.96; }
+    if (party > 0) party--;
+    if (!dragging) { rotY += s.spin + spinExtra + kickSpin + (party > 0 ? 0.05 : 0); spinExtra *= 0.96; kickSpin *= 0.90; }
+    pop *= 0.86;
     draw(s);
   }
 
@@ -2543,7 +2523,9 @@ var GlobeFX = (function () {
     ctx.setTransform(dprG, 0, 0, dprG, 0, 0);
     ctx.clearRect(0, 0, sz, sz);
     var cosY = Math.cos(rotY), sinY = Math.sin(rotY), cosX = Math.cos(rotX), sinX = Math.sin(rotX);
-    var pulse = 1 + s.pulse * 0.05 * Math.sin(t * 0.11);
+    var bob = party > 0 ? Math.sin(t * 0.55) * 7 : 0;
+    var bounce = party > 0 ? (1 + 0.10 * Math.abs(Math.sin(t * 0.55))) : 1;
+    var pulse = (1 + s.pulse * 0.05 * Math.sin(t * 0.11) + pop) * bounce;
     var hueShift = s.hue;
     // back-to-front for nicer overlap
     var proj = [];
@@ -2551,7 +2533,7 @@ var GlobeFX = (function () {
       var p = pts[i];
       var x1 = p.x * cosY - p.z * sinY, z1 = p.x * sinY + p.z * cosY;
       var y1 = p.y * cosX - z1 * sinX, z2 = p.y * sinX + z1 * cosX;
-      proj.push({ sx: cx + x1 * R * pulse, sy: cy + y1 * R * pulse, d: (z2 + 1) / 2, ty: (p.y + 1) / 2 });
+      proj.push({ sx: cx + x1 * R * pulse, sy: cy + bob + y1 * R * pulse, d: (z2 + 1) / 2, ty: (p.y + 1) / 2 });
     }
     proj.sort(function (a, b) { return a.d - b.d; });
     for (var j = 0; j < proj.length; j++) {
@@ -2565,7 +2547,11 @@ var GlobeFX = (function () {
       r = Math.max(0, Math.min(255, r)); g = Math.max(0, Math.min(255, g)); b = Math.max(0, Math.min(255, b));
       ctx.beginPath();
       ctx.arc(q.sx, q.sy, size, 0, 6.2832);
-      ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',' + a.toFixed(3) + ')';
+      if (party > 0) {
+        ctx.fillStyle = 'hsla(' + ((q.ty * 140 + t * 7) % 360) + ',92%,62%,' + a.toFixed(3) + ')';
+      } else {
+        ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',' + a.toFixed(3) + ')';
+      }
       ctx.fill();
     }
     var gg = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.15);
@@ -2578,6 +2564,8 @@ var GlobeFX = (function () {
   return {
     mount: mount,
     setState: function (x) { state = x; },
+    kick: function () { kickSpin = Math.min(0.06, kickSpin + 0.018); pop = Math.min(0.22, pop + 0.16); },
+    celebrate: function () { party = 120; },
     remount: function () { var c = document.getElementById('globe-canvas'); if (c) mount(c); }
   };
 })();
@@ -2585,6 +2573,28 @@ var GlobeFX = (function () {
 // Mount the globe on load and whenever the welcome screen is (re)built.
 document.addEventListener('DOMContentLoaded', function () { GlobeFX.remount(); });
 setTimeout(function () { GlobeFX.remount(); }, 200);
+
+// Transform the persistent globe between the big hero pose and a small docked pose.
+function setGlobeMode(mode) {
+  var st = document.getElementById('globe-stage');
+  var cv = document.getElementById('globe-canvas');
+  if (!st || !cv) return;
+  if (mode === 'dock') {
+    st.classList.remove('globe-mode-hero');
+    st.classList.add('globe-mode-dock');
+    var w = st.getBoundingClientRect().width || 600;
+    var dx = Math.round(w / 2 - 50);  // hero centre -> top-right
+    cv.style.transform = 'translate(' + dx + 'px,-82px) scale(0.247)';
+  } else {
+    st.classList.remove('globe-mode-dock');
+    st.classList.add('globe-mode-hero');
+    cv.style.transform = '';
+  }
+}
+window.addEventListener('resize', function () {
+  var st = document.getElementById('globe-stage');
+  if (st && st.classList.contains('globe-mode-dock')) setGlobeMode('dock');
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MULTI-PHASE AI STATUS CARD — one live indicator that walks through the
