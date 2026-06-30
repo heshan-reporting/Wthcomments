@@ -1,0 +1,1448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FB AI Brain</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#09090b;--s1:#111113;--s2:#18181b;--s3:#27272a;
+  --b1:rgba(255,255,255,.06);--b2:rgba(255,255,255,.1);--b3:rgba(255,255,255,.16);
+  --t1:#fafafa;--t2:rgba(250,250,250,.6);--t3:rgba(250,250,250,.3);--t4:rgba(250,250,250,.12);
+  --acc:#7c3aed;--acc2:#6d28d9;--acc-g:rgba(124,58,237,.15);--acc-b:rgba(124,58,237,.08);
+  --grn:#22c55e;--grn-g:rgba(34,197,94,.12);
+  --sky:#0ea5e9;--sky-g:rgba(14,165,233,.1);
+  --amb:#f59e0b;--amb-g:rgba(245,158,11,.1);
+  --rose:#f43f5e;--rose-g:rgba(244,63,94,.1);
+  --r:8px;--r2:12px;--r3:16px;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg)}
+body{font-family:'Space Grotesk',sans-serif;color:var(--t1);-webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
+
+/* ── SCANLINES ── */
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.015) 3px,rgba(0,0,0,.015) 4px);pointer-events:none;z-index:9999}
+
+/* ── HEADER ── */
+.header{height:52px;background:rgba(9,9,11,.9);border-bottom:1px solid var(--b1);backdrop-filter:blur(12px);display:flex;align-items:center;padding:0 20px;gap:14px;flex-shrink:0;position:sticky;top:0;z-index:100}
+.header-logo{display:flex;align-items:center;gap:10px}
+.logo-mark{width:28px;height:28px;background:linear-gradient(135deg,var(--acc),#a855f7);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.logo-text{font-size:14px;font-weight:700;letter-spacing:-.02em;color:var(--t1)}
+.logo-sub{font-size:11px;color:var(--t3);font-family:'JetBrains Mono',monospace;letter-spacing:.04em}
+.header-mid{flex:1;display:flex;justify-content:center}
+.status-pill{display:flex;align-items:center;gap:6px;padding:4px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:20px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3)}
+.status-dot{width:6px;height:6px;border-radius:50%;background:var(--t3);flex-shrink:0}
+.status-dot.live{background:var(--grn);box-shadow:0 0 6px var(--grn);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.header-right{display:flex;align-items:center;gap:8px}
+.hbtn{font-family:'JetBrains Mono',monospace;font-size:10px;padding:5px 11px;border-radius:6px;border:1px solid var(--b2);background:none;color:var(--t2);cursor:pointer;transition:all .15s;white-space:nowrap}
+.hbtn:hover{border-color:var(--acc);color:var(--acc);background:var(--acc-b)}
+.period-btn{color:var(--sky);border-color:rgba(14,165,233,.3);background:var(--sky-g)}
+
+/* ── LAYOUT ── */
+.body-wrap{display:flex;flex:1;overflow:hidden}
+
+/* ── SIDEBAR ── */
+.sidebar{width:220px;flex-shrink:0;background:var(--s1);border-right:1px solid var(--b1);display:flex;flex-direction:column;overflow-y:auto}
+.sb-section{padding:12px 0 4px}
+.sb-label{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--t4);padding:0 16px;margin-bottom:6px}
+.sb-item{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2);padding:6px 16px;cursor:pointer;display:flex;align-items:center;gap:8px;border-left:2px solid transparent;transition:all .12s;line-height:1.4}
+.sb-item:hover{color:var(--t1);background:var(--b1);border-left-color:var(--acc)}
+.sb-item .ic{font-size:13px;width:16px;flex-shrink:0}
+.sb-divider{height:1px;background:var(--b1);margin:6px 16px}
+.sb-foot{margin-top:auto;padding:14px 16px;border-top:1px solid var(--b1)}
+.sb-foot-txt{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t4);line-height:1.8}
+.sb-foot-txt b{color:rgba(124,58,237,.7)}
+
+/* ── MAIN ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+
+/* ── CHAT OUTPUT ── */
+.chat{flex:1;overflow-y:auto;padding:20px 24px;scrollbar-width:thin;scrollbar-color:var(--b2) transparent;display:flex;flex-direction:column;gap:16px}
+.chat::-webkit-scrollbar{width:4px}
+.chat::-webkit-scrollbar-thumb{background:var(--b2);border-radius:2px}
+
+/* ── MESSAGE BUBBLES ── */
+.msg{display:flex;gap:12px;max-width:100%;animation:fadeup .25s ease}
+@keyframes fadeup{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.msg.user{justify-content:flex-end}
+.msg.user .bubble{background:linear-gradient(135deg,var(--acc),#a855f7);color:#fff;border-radius:var(--r2) var(--r2) 4px var(--r2);max-width:72%;padding:11px 16px;font-size:14px;line-height:1.55}
+.msg.ai .bubble{background:var(--s1);border:1px solid var(--b1);border-radius:4px var(--r2) var(--r2) var(--r2);flex:1;padding:16px 18px;font-size:14px;line-height:1.65;color:var(--t1)}
+.msg.ai .bubble p{margin-bottom:10px}
+.msg.ai .bubble p:last-child{margin-bottom:0}
+.msg.ai .bubble strong{color:var(--t1);font-weight:600}
+.msg.ai .bubble em{color:var(--t2)}
+.msg.ai .bubble code{font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--s3);padding:1px 5px;border-radius:4px;color:var(--acc)}
+.msg-avatar{width:28px;height:28px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px}
+.msg-avatar.ai-av{background:linear-gradient(135deg,var(--acc),#a855f7)}
+.msg-avatar.user-av{background:var(--s3);font-size:12px}
+
+/* ── THINKING INDICATOR ── */
+.thinking{display:flex;gap:12px;align-items:flex-start}
+.think-bubble{background:var(--s1);border:1px solid var(--b1);border-radius:4px var(--r2) var(--r2) var(--r2);padding:14px 18px;display:flex;align-items:center;gap:10px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3)}
+.think-dots span{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--acc);animation:dot-bounce 1.4s ease-in-out infinite}
+.think-dots span:nth-child(2){animation-delay:.2s}
+.think-dots span:nth-child(3){animation-delay:.4s}
+@keyframes dot-bounce{0%,80%,100%{transform:scale(.6);opacity:.4}40%{transform:scale(1);opacity:1}}
+.think-steps{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);padding:6px 10px;border-left:2px solid var(--acc);margin-left:4px}
+.think-step{padding:1px 0;transition:color .3s}
+.think-step.done{color:var(--grn)}
+.think-step.active{color:var(--amb)}
+
+/* ── DATA BLOCKS ── */
+.data-block{margin-top:10px;border-radius:var(--r2);overflow:hidden;border:1px solid var(--b1);background:var(--s2)}
+.db-head{background:var(--s3);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.db-title{font-size:12px;font-weight:600;color:var(--t1);letter-spacing:-.01em}
+.db-meta{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--t3)}
+.db-body{padding:14px 16px}
+
+/* ── KPI GRID ── */
+.kpi-grid{display:grid;gap:8px;margin-bottom:12px}
+.kpi-grid.g2{grid-template-columns:repeat(2,1fr)}.kpi-grid.g3{grid-template-columns:repeat(3,1fr)}.kpi-grid.g4{grid-template-columns:repeat(4,1fr)}.kpi-grid.g5{grid-template-columns:repeat(5,1fr)}
+@media(max-width:900px){.kpi-grid.g4,.kpi-grid.g5{grid-template-columns:repeat(2,1fr)}.kpi-grid.g3{grid-template-columns:repeat(2,1fr)}}
+.kpi{background:var(--s1);border:1px solid var(--b1);border-radius:var(--r);padding:12px 14px;position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;inset:0;opacity:0;transition:opacity .2s}
+.kpi.grn{border-color:rgba(34,197,94,.2)}.kpi.grn::before{background:var(--grn-g);opacity:1}.kpi.grn .kv{color:var(--grn)}
+.kpi.sky{border-color:rgba(14,165,233,.2)}.kpi.sky::before{background:var(--sky-g);opacity:1}.kpi.sky .kv{color:var(--sky)}
+.kpi.amb{border-color:rgba(245,158,11,.2)}.kpi.amb::before{background:var(--amb-g);opacity:1}.kpi.amb .kv{color:var(--amb)}
+.kpi.rose{border-color:rgba(244,63,94,.2)}.kpi.rose::before{background:var(--rose-g);opacity:1}.kpi.rose .kv{color:var(--rose)}
+.kpi.vio{border-color:rgba(124,58,237,.2)}.kpi.vio::before{background:var(--acc-b);opacity:1}.kpi.vio .kv{color:#a78bfa}}
+.kl{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;position:relative}
+.kv{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:600;letter-spacing:-.03em;line-height:1;position:relative}
+.ks{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);margin-top:4px;position:relative}
+
+/* ── TABLE ── */
+.tbl-wrap{overflow-x:auto}
+.tbl{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:11px}
+.tbl th{font-size:9px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);padding:6px 12px;text-align:right;border-bottom:1px solid var(--b1);white-space:nowrap}
+.tbl th:first-child{text-align:left}
+.tbl td{padding:8px 12px;color:var(--t2);text-align:right;border-bottom:1px solid rgba(255,255,255,.025)}
+.tbl td:first-child{text-align:left;font-family:'Space Grotesk',sans-serif;color:var(--t1);font-size:12px;font-weight:500}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:rgba(255,255,255,.02)}
+
+/* ── STATUS BADGES ── */
+.badge{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;padding:2px 7px;border-radius:4px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
+.badge::before{content:'';width:4px;height:4px;border-radius:50%}
+.badge.active{color:var(--grn);background:var(--grn-g);border:1px solid rgba(34,197,94,.25)}.badge.active::before{background:var(--grn)}
+.badge.paused{color:var(--amb);background:var(--amb-g);border:1px solid rgba(245,158,11,.25)}.badge.paused::before{background:var(--amb)}
+.badge.ended{color:var(--t3);background:var(--b1);border:1px solid var(--b2)}.badge.ended::before{background:var(--t3)}
+.badge.deleted{color:var(--rose);background:var(--rose-g);border:1px solid rgba(244,63,94,.2)}.badge.deleted::before{background:var(--rose)}
+
+/* ── ATTRIBUTION TAG ── */
+.attr-tag{font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 7px;border-radius:4px;background:var(--acc-b);border:1px solid rgba(124,58,237,.25);color:#a78bfa;white-space:nowrap}
+
+/* ── BAR CHART ── */
+.bar-row{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.bar-lbl{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--t2);width:140px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-track{flex:1;height:4px;background:rgba(255,255,255,.05);border-radius:2px;overflow:hidden}
+.bar-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--acc),#a855f7);transition:width .6s ease}
+.bar-val{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);width:60px;text-align:right;flex-shrink:0}
+.ch-wrap{position:relative;margin-top:12px}
+
+/* ── PILLS ── */
+.pill{font-size:9.5px;font-weight:600;padding:2px 7px;border-radius:4px;font-family:'JetBrains Mono',monospace;white-space:nowrap;display:inline-block}
+.pill.pos{color:var(--grn);background:var(--grn-g);border:1px solid rgba(34,197,94,.2)}
+.pill.neu{color:var(--sky);background:var(--sky-g);border:1px solid rgba(14,165,233,.2)}
+.pill.neg{color:var(--rose);background:var(--rose-g);border:1px solid rgba(244,63,94,.2)}
+.pill.nr{color:var(--amb);background:var(--amb-g);border:1px solid rgba(245,158,11,.2)}
+
+/* ── COMMENT CARDS ── */
+.cc{background:var(--s1);border:1px solid var(--b1);border-radius:var(--r);padding:12px 14px;margin-bottom:6px;border-left-width:3px}
+.cc.pos{border-left-color:var(--grn)}.cc.neu{border-left-color:var(--sky)}.cc.neg{border-left-color:var(--rose)}.cc.unk{border-left-color:var(--t3)}
+.cc-meta{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--t3);display:flex;gap:10px;margin-bottom:5px;flex-wrap:wrap}
+.cc-txt{font-size:13px;color:var(--t1);line-height:1.5}
+.cc-foot{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap;align-items:center}
+
+/* ── INPUT ZONE ── */
+.input-zone{flex-shrink:0;background:rgba(9,9,11,.95);border-top:1px solid var(--b1);backdrop-filter:blur(10px);padding:12px 20px}
+.quick-q{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.qq{font-family:'JetBrains Mono',monospace;font-size:10px;padding:4px 10px;border-radius:6px;border:1px solid var(--b1);color:var(--t3);cursor:pointer;transition:all .12s;background:none;white-space:nowrap}
+.qq:hover{border-color:var(--acc);color:var(--acc);background:var(--acc-b)}
+.input-row{display:flex;align-items:center;gap:10px;background:var(--s2);border:1px solid var(--b2);border-radius:var(--r2);padding:4px 4px 4px 16px;transition:border-color .2s}
+.input-row:focus-within{border-color:var(--acc)}
+.chat-in{flex:1;background:none;border:none;outline:none;font-family:'Space Grotesk',sans-serif;font-size:14px;color:var(--t1);caret-color:var(--acc);padding:8px 0}
+.chat-in::placeholder{color:var(--t4)}
+.send-btn{width:36px;height:36px;border-radius:8px;background:linear-gradient(135deg,var(--acc),#a855f7);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:opacity .15s}
+.send-btn:hover{opacity:.85}.send-btn:disabled{opacity:.35;cursor:not-allowed}
+.send-btn svg{width:16px;height:16px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* ── ATTR SELECTOR ── */
+.attr-selector{display:flex;align-items:center;gap:8px;padding:0 0 10px}
+.attr-lbl{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);white-space:nowrap}
+.attr-select{font-family:'JetBrains Mono',monospace;font-size:10px;background:var(--s2);border:1px solid var(--b2);border-radius:5px;color:var(--t1);padding:4px 8px;outline:none;cursor:pointer}
+.attr-select:focus{border-color:var(--acc)}
+.attr-select option{background:var(--s2)}
+
+/* ── MODALS ── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);backdrop-filter:blur(12px);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px}
+.modal{background:var(--s1);border:1px solid var(--b2);border-radius:var(--r3);max-width:540px;width:100%;max-height:92vh;overflow-y:auto;display:flex;flex-direction:column}
+.modal-hdr{padding:22px 26px 16px;border-bottom:1px solid var(--b1)}
+.modal-title{font-size:17px;font-weight:700;color:var(--t1);letter-spacing:-.02em;margin-bottom:3px}
+.modal-sub{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--t3);line-height:1.5}
+.modal-bd{padding:20px 26px;flex:1;overflow-y:auto}
+.modal-ft{padding:14px 26px;border-top:1px solid var(--b1);display:flex;gap:8px;justify-content:flex-end}
+.pips{display:flex;gap:5px;margin-bottom:20px}
+.pip{flex:1;height:2px;background:var(--b1);border-radius:1px;transition:background .3s}
+.pip.done{background:var(--grn)}.pip.active{background:var(--acc)}
+.sp{display:none}.sp.active{display:block}
+.mf{margin-bottom:16px}
+.mf label{display:block;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);margin-bottom:7px}
+.mf input{width:100%;background:var(--s2);border:1px solid var(--b1);border-radius:var(--r);color:var(--t1);font-family:'JetBrains Mono',monospace;font-size:12px;padding:11px 14px;outline:none;transition:border-color .2s}
+.mf input:focus{border-color:var(--acc)}
+.mf input::placeholder{color:var(--t3)}
+.mf-hint{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);margin-top:6px;line-height:1.6}
+.mf-hint a{color:var(--sky)}
+.ibox{border-radius:var(--r);padding:12px 14px;font-family:'JetBrains Mono',monospace;font-size:10.5px;line-height:1.75;margin-bottom:14px}
+.ibox.sky{background:var(--sky-g);border:1px solid rgba(14,165,233,.2);color:rgba(14,165,233,.8)}
+.ibox.sky b{color:var(--sky)}
+.ibox.amb{background:var(--amb-g);border:1px solid rgba(245,158,11,.2);color:rgba(245,158,11,.8)}
+.ibox.amb b{color:var(--amb)}
+.acct-list{display:flex;flex-direction:column;gap:5px;max-height:240px;overflow-y:auto;scrollbar-width:thin}
+.acct-card{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--s2);border:1.5px solid var(--b1);border-radius:var(--r);cursor:pointer;transition:all .15s}
+.acct-card:hover{border-color:var(--b2);background:var(--s3)}
+.acct-card.sel{border-color:var(--acc);background:var(--acc-b)}
+.acct-card input[type=radio]{accent-color:var(--acc);flex-shrink:0}
+.acct-info{flex:1;min-width:0}
+.acct-name{font-size:13px;font-weight:600;color:var(--t1);margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acct-sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3)}
+.acct-stat{font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 7px;border-radius:4px;border:1px solid var(--b1);color:var(--t3);flex-shrink:0}
+.acct-stat.on{color:var(--grn);border-color:rgba(34,197,94,.3);background:var(--grn-g)}
+.spin-row{display:flex;align-items:center;gap:9px;padding:12px 14px;background:var(--s2);border-radius:var(--r);font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3)}
+.spn{width:12px;height:12px;border:1.5px solid rgba(255,255,255,.1);border-top-color:var(--acc);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.chips{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px}
+.chip{font-family:'JetBrains Mono',monospace;font-size:10px;padding:4px 10px;border-radius:5px;border:1px solid var(--b1);color:var(--t3);cursor:pointer;background:none;transition:all .12s}
+.chip:hover,.chip.on{border-color:var(--sky);color:var(--sky);background:var(--sky-g)}
+.date-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.date-inp{width:100%;background:var(--s2);border:1px solid var(--b1);border-radius:var(--r);color:var(--t1);font-family:'JetBrains Mono',monospace;font-size:11px;padding:10px 12px;outline:none;transition:border-color .2s}
+.date-inp:focus{border-color:var(--acc)}
+.m-btn{font-family:'JetBrains Mono',monospace;font-size:11.5px;font-weight:600;padding:10px 20px;border-radius:var(--r);border:none;cursor:pointer;transition:opacity .15s;display:inline-flex;align-items:center;gap:7px}
+.m-btn:hover{opacity:.85}.m-btn.pri{background:linear-gradient(135deg,var(--acc),#a855f7);color:#fff}.m-btn.sec{background:var(--s2);color:var(--t2);border:1px solid var(--b1)}
+
+/* ── DATE QUICK MODAL ── */
+.qmodal{position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(8px);z-index:300;display:none;align-items:center;justify-content:center;padding:20px}
+.qmodal.open{display:flex}
+.qbox{background:var(--s1);border:1px solid var(--b2);border-radius:var(--r2);padding:22px;max-width:380px;width:100%}
+
+/* ── WELCOME SCREEN ── */
+.welcome{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:40px;text-align:center;gap:16px}
+.welcome-icon{width:56px;height:56px;background:linear-gradient(135deg,var(--acc),#a855f7);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;margin-bottom:4px}
+.welcome h1{font-size:26px;font-weight:700;letter-spacing:-.03em;color:var(--t1)}
+.welcome p{font-size:14px;color:var(--t2);max-width:420px;line-height:1.65}
+.example-qs{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:540px;width:100%;margin-top:8px}
+.example-q{background:var(--s1);border:1px solid var(--b1);border-radius:var(--r2);padding:14px 16px;text-align:left;cursor:pointer;transition:all .2s}
+.example-q:hover{border-color:var(--acc);background:var(--acc-b)}
+.example-q .eq-icon{font-size:20px;margin-bottom:8px}
+.example-q .eq-txt{font-size:12px;font-weight:500;color:var(--t1);line-height:1.5}
+.example-q .eq-sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);margin-top:4px}
+</style>
+</head>
+<body>
+
+<!-- OAuth redirect handler -->
+<script>
+(function(){
+  var h = window.location.hash;
+  if (h && h.indexOf('access_token') !== -1) {
+    var p = new URLSearchParams(h.replace(/^#/,''));
+    var tok = p.get('access_token');
+    if (tok && window.opener) {
+      window.opener.postMessage({type:'fb_oauth_token',token:tok},'*');
+      window.close();
+    }
+  }
+})();
+</script>
+
+<!-- ═══ SETUP MODAL ═══════════════════════════════════════════════ -->
+<div class="overlay" id="setupModal">
+<div class="modal">
+  <div class="modal-hdr">
+    <div class="modal-title">🧠 FB AI Brain Setup</div>
+    <div class="modal-sub">Connect Facebook + Claude once. Your AI analyst is ready in 3 steps.</div>
+  </div>
+  <div class="modal-bd">
+    <div class="pips">
+      <div class="pip active" id="pip0"></div><div style="width:4px"></div>
+      <div class="pip" id="pip1"></div><div style="width:4px"></div>
+      <div class="pip" id="pip2"></div>
+    </div>
+
+    <!-- Step 0: API Keys -->
+    <div class="sp active" id="sp0">
+      <!-- TAB BUTTONS -->
+      <div style="display:flex;gap:0;margin-bottom:18px;border:1px solid var(--b1);border-radius:var(--r);overflow:hidden">
+        <button id="tab-sdk-btn" onclick="showTab('sdk')" style="flex:1;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;padding:9px;border:none;cursor:pointer;background:linear-gradient(135deg,var(--acc),#a855f7);color:#fff;transition:all .15s">🔐 Login with Facebook</button>
+        <button id="tab-man-btn" onclick="showTab('man')" style="flex:1;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;padding:9px;border:none;cursor:pointer;background:var(--s2);color:var(--t2);transition:all .15s">📋 Paste token manually</button>
+      </div>
+
+      <!-- Login tab -->
+      <div id="tab-sdk">
+        <div class="ibox sky">
+          <b>3-minute setup:</b><br>
+          1. <a href="https://developers.facebook.com/apps/" target="_blank">Create a Facebook App</a> (Business type) → copy your <b>App ID</b><br>
+          2. In App → Facebook Login → Settings → add this page URL as a redirect URI:<br>
+          <span id="redirect-uri" style="color:var(--grn);font-size:10px;word-break:break-all">Loading…</span><br>
+          3. Click <b>Login with Facebook</b> below
+        </div>
+        <div class="mf">
+          <label>Facebook App ID</label>
+          <input type="text" id="inp-app-id" placeholder="123456789012345"/>
+        </div>
+        <button onclick="doLogin()" style="width:100%;padding:12px;background:#1877f2;color:#fff;border:none;border-radius:var(--r);font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+          Login with Facebook
+        </button>
+        <div id="login-status" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3);text-align:center;margin-top:10px;min-height:18px"></div>
+      </div>
+
+      <!-- Manual tab -->
+      <div id="tab-man" style="display:none">
+        <div class="ibox sky"><b>Get token:</b> <a href="https://developers.facebook.com/tools/explorer/" target="_blank">Graph API Explorer</a> → Generate Token → grant <b>ads_read · ads_management · pages_read_engagement · pages_show_list</b></div>
+        <div class="mf">
+          <label>Facebook User Access Token</label>
+          <input type="password" id="inp-fb" placeholder="EAABxxx…"/>
+        </div>
+      </div>
+
+      <div class="mf" style="margin-top:16px">
+        <label>Anthropic API Key <span style="text-transform:none;letter-spacing:0;font-weight:300;font-size:10px">(required — powers the AI analysis)</span></label>
+        <input type="password" id="inp-claude" placeholder="sk-ant-…"/>
+        <div class="mf-hint"><a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com/settings/keys</a></div>
+      </div>
+      <div class="mf">
+        <label>Cloudflare Proxy URL <span style="text-transform:none;letter-spacing:0;font-weight:300;font-size:10px">(optional — only needed if Claude fails)</span></label>
+        <input type="text" id="inp-proxy" placeholder="https://fb-ai-proxy.yourname.workers.dev (leave blank to try direct)"/>
+        <div class="mf-hint">
+          Leave blank — the app tries to call Claude directly first.<br>
+          If you see a CORS error, deploy the free <code>cloudflare_worker.js</code>:<br>
+          <a href="https://dash.cloudflare.com" target="_blank">dash.cloudflare.com</a> → Workers → Create → paste file → Deploy → paste URL here
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 1: Pick Ad Account -->
+    <div class="sp" id="sp1">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2);margin-bottom:14px;line-height:1.7">Select the ad account to analyse. All accounts on your token are shown below.</div>
+      <div id="acct-wrap"><div class="spin-row"><div class="spn"></div>Fetching your ad accounts…</div></div>
+      <div id="acct-err" style="display:none;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--rose);margin-top:10px;line-height:1.6"></div>
+    </div>
+
+    <!-- Step 2: Date & Attribution -->
+    <div class="sp" id="sp2">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2);margin-bottom:14px;line-height:1.7">Set your default period. You can change this anytime by asking or clicking the date button.</div>
+      <div class="mf">
+        <label>Default date range</label>
+        <div class="chips">
+          <button class="chip" onclick="pickPeriod('last_7d','Last 7 days',this)">Last 7 days</button>
+          <button class="chip on" onclick="pickPeriod('last_30d','Last 30 days',this)">Last 30 days</button>
+          <button class="chip" onclick="pickPeriod('last_60d','Last 60 days',this)">Last 60 days</button>
+          <button class="chip" onclick="pickPeriod('last_90d','Last 90 days',this)">Last 90 days</button>
+          <button class="chip" onclick="pickPeriod('this_month','This month',this)">This month</button>
+          <button class="chip" onclick="pickPeriod('last_month','Last month',this)">Last month</button>
+          <button class="chip" onclick="pickPeriod('custom','Custom…',this)">Custom →</button>
+        </div>
+      </div>
+      <div id="custom-wrap" style="display:none">
+        <div class="mf"><label>Custom range</label>
+          <div class="date-row"><input type="date" class="date-inp" id="inp-from"><input type="date" class="date-inp" id="inp-to"></div>
+        </div>
+      </div>
+      <div class="mf">
+        <label>Default attribution window</label>
+        <select id="inp-attr" class="date-inp" style="cursor:pointer">
+          <option value="7d_click,1d_view">7-day click, 1-day view (Meta default)</option>
+          <option value="1d_click">1-day click only</option>
+          <option value="7d_click">7-day click only</option>
+          <option value="28d_click,1d_view">28-day click, 1-day view</option>
+          <option value="28d_click,7d_view">28-day click, 7-day view</option>
+          <option value="1d_click,1d_view">1-day click, 1-day view</option>
+        </select>
+        <div class="mf-hint">This affects conversion counts. You can ask the AI to re-analyse with a different window.</div>
+      </div>
+      <div id="period-preview" style="font-family:'JetBrains Mono',monospace;font-size:11px;padding:10px 12px;background:var(--s2);border-radius:var(--r);color:var(--sky)">Period: Last 30 days</div>
+    </div>
+  </div>
+  <div class="modal-ft">
+    <button class="m-btn sec" id="backBtn" onclick="stepBack()" style="display:none">← Back</button>
+    <button class="m-btn pri" id="nextBtn" onclick="stepNext()">Next →</button>
+  </div>
+</div>
+</div>
+
+<!-- ═══ DATE MODAL ═══════════════════════════════════════════════ -->
+<div class="qmodal" id="dateModal">
+<div class="qbox">
+  <div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:3px;letter-spacing:-.01em">📅 Change Date Range</div>
+  <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);margin-bottom:14px" id="cur-period">Current: Last 30 days</div>
+  <div class="chips" style="margin-bottom:14px">
+    <button class="chip" onclick="qPeriod('last_7d','Last 7 days',this)">7d</button>
+    <button class="chip" onclick="qPeriod('last_14d','Last 14 days',this)">14d</button>
+    <button class="chip on" onclick="qPeriod('last_30d','Last 30 days',this)">30d</button>
+    <button class="chip" onclick="qPeriod('last_60d','Last 60 days',this)">60d</button>
+    <button class="chip" onclick="qPeriod('last_90d','Last 90 days',this)">90d</button>
+    <button class="chip" onclick="qPeriod('this_month','This month',this)">This month</button>
+    <button class="chip" onclick="qPeriod('last_month','Last month',this)">Last month</button>
+  </div>
+  <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--t3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.08em">Custom range</div>
+  <div class="date-row" style="margin-bottom:14px">
+    <div><label style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--t3);display:block;margin-bottom:5px;letter-spacing:.08em;text-transform:uppercase">From</label><input type="date" class="date-inp" id="dm-from"></div>
+    <div><label style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--t3);display:block;margin-bottom:5px;letter-spacing:.08em;text-transform:uppercase">To</label><input type="date" class="date-inp" id="dm-to"></div>
+  </div>
+  <div style="display:flex;gap:8px;justify-content:flex-end">
+    <button class="m-btn sec" onclick="document.getElementById('dateModal').classList.remove('open')">Cancel</button>
+    <button class="m-btn pri" onclick="applyCustom()">Apply</button>
+  </div>
+</div>
+</div>
+
+<!-- ═══ HEADER ═══════════════════════════════════════════════════ -->
+<div class="header">
+  <div class="header-logo">
+    <div class="logo-mark">🧠</div>
+    <div>
+      <div class="logo-text">FB AI Brain</div>
+      <div class="logo-sub">Powered by Claude</div>
+    </div>
+  </div>
+  <div class="header-mid">
+    <div class="status-pill">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Not connected</span>
+    </div>
+  </div>
+  <div class="header-right">
+    <button class="hbtn period-btn" id="periodBtn" onclick="document.getElementById('dateModal').classList.add('open')">📅 Last 30 days</button>
+    <button class="hbtn" onclick="document.getElementById('setupModal').style.display='flex'">⚙ Setup</button>
+  </div>
+</div>
+
+<div class="body-wrap">
+<!-- ═══ SIDEBAR ═══════════════════════════════════════════════════ -->
+<div class="sidebar">
+  <div class="sb-section">
+    <div class="sb-label">Quick questions</div>
+    <div class="sb-item" onclick="ask('How are my campaigns performing this period?')"><span class="ic">📊</span>Campaign overview</div>
+    <div class="sb-item" onclick="ask('Show me ad-level performance breakdown')"><span class="ic">🎯</span>Ad breakdown</div>
+    <div class="sb-item" onclick="ask('What is my daily spend trend?')"><span class="ic">📈</span>Spend trend</div>
+    <div class="sb-item" onclick="ask('Which ads have the best CTR and why?')"><span class="ic">🏆</span>Best performers</div>
+    <div class="sb-item" onclick="ask('Which campaigns ended or paused this period?')"><span class="ic">⏹</span>Ended/paused ads</div>
+  </div>
+  <div class="sb-divider"></div>
+  <div class="sb-section">
+    <div class="sb-label">Comments & Engagement</div>
+    <div class="sb-item" onclick="ask('Fetch and analyse all ad comments')"><span class="ic">💬</span>All comments</div>
+    <div class="sb-item" onclick="ask('Show me negative comments that need a reply')"><span class="ic">⚠️</span>Needs reply</div>
+    <div class="sb-item" onclick="ask('Show reactions breakdown across all ads')"><span class="ic">❤️</span>Reactions</div>
+  </div>
+  <div class="sb-divider"></div>
+  <div class="sb-section">
+    <div class="sb-label">Analysis</div>
+    <div class="sb-item" onclick="ask('Analyse my attribution model and explain which conversions are counted')"><span class="ic">🔗</span>Attribution</div>
+    <div class="sb-item" onclick="ask('Compare my top 3 ads head to head')"><span class="ic">⚡</span>Compare ads</div>
+    <div class="sb-item" onclick="ask('What are my key insights and recommendations?')"><span class="ic">💡</span>Recommendations</div>
+    <div class="sb-item" onclick="ask('Generate a full performance report')"><span class="ic">📄</span>Full report</div>
+  </div>
+  <div class="sb-divider"></div>
+  <div class="sb-section">
+    <div class="sb-label">Period</div>
+    <div class="sb-item" onclick="ask('Switch to last 7 days')"><span class="ic">7</span>Last 7 days</div>
+    <div class="sb-item" onclick="ask('Switch to last 30 days')"><span class="ic">30</span>Last 30 days</div>
+    <div class="sb-item" onclick="document.getElementById('dateModal').classList.add('open')"><span class="ic">📅</span>Custom range</div>
+  </div>
+  <div class="sb-foot">
+    <div class="sb-foot-txt">
+      AI Engine: <b>Claude Sonnet</b><br>
+      Data: <b>Facebook Graph API</b><br>
+      <span id="attr-foot">Attr: —</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MAIN CHAT ═══════════════════════════════════════════════ -->
+<div class="main">
+  <div class="chat" id="chat">
+    <!-- Welcome screen shown before any messages -->
+    <div class="welcome" id="welcome">
+      <div class="welcome-icon">🧠</div>
+      <h1>Your Facebook Ads AI</h1>
+      <p>Ask anything about your campaigns in plain English. I'll fetch the data, analyse it with full awareness of attribution models, campaign status, and date ranges — then give you clear insights.</p>
+      <div class="example-qs">
+        <div class="example-q" onclick="ask('How did my campaigns perform in the last 7 days vs the 7 days before?')">
+          <div class="eq-icon">📊</div>
+          <div class="eq-txt">How did my campaigns perform last 7 days vs the 7 days before?</div>
+          <div class="eq-sub">Period comparison</div>
+        </div>
+        <div class="example-q" onclick="ask('Which campaigns ended this month and what was their performance?')">
+          <div class="eq-icon">⏹</div>
+          <div class="eq-txt">Which campaigns ended this month and what was their performance?</div>
+          <div class="eq-sub">Ended campaign data</div>
+        </div>
+        <div class="example-q" onclick="ask('Explain my attribution model and how it affects my conversion numbers')">
+          <div class="eq-icon">🔗</div>
+          <div class="eq-txt">Explain my attribution model and how it affects conversion counts</div>
+          <div class="eq-sub">Attribution analysis</div>
+        </div>
+        <div class="example-q" onclick="ask('What are my best and worst ads right now and why?')">
+          <div class="eq-icon">💡</div>
+          <div class="eq-txt">What are my best and worst performing ads right now and why?</div>
+          <div class="eq-sub">AI recommendations</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="input-zone">
+    <div class="attr-selector">
+      <span class="attr-lbl">Attribution:</span>
+      <select class="attr-select" id="attr-select" onchange="updateAttr(this.value)">
+        <option value="7d_click,1d_view">7-day click · 1-day view (Meta default)</option>
+        <option value="1d_click">1-day click</option>
+        <option value="7d_click">7-day click</option>
+        <option value="28d_click,1d_view">28-day click · 1-day view</option>
+        <option value="28d_click,7d_view">28-day click · 7-day view</option>
+      </select>
+    </div>
+    <div class="quick-q">
+      <button class="qq" onclick="ask(this.textContent)">Campaign performance</button>
+      <button class="qq" onclick="ask(this.textContent)">Ended campaigns this period</button>
+      <button class="qq" onclick="ask(this.textContent)">Fetch all ad comments</button>
+      <button class="qq" onclick="ask(this.textContent)">Best ads by CTR</button>
+      <button class="qq" onclick="ask(this.textContent)">Attribution analysis</button>
+      <button class="qq" onclick="ask(this.textContent)">Recommendations</button>
+    </div>
+    <div class="input-row">
+      <input class="chat-in" id="cin" placeholder="Ask anything about your Facebook ads…" autocomplete="off"/>
+      <button class="send-btn" id="sendBtn" onclick="send()">
+        <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+// ─── STATE ────────────────────────────────────────────────────────────────
+const GRAPH = 'https://graph.facebook.com/v19.0';
+let FB_TOKEN = '', PAGE_TOKEN = '', AD_ACCOUNT = '', ACCT_NAME = '', CLAUDE_KEY = '', PROXY_URL = '';
+let PERIOD = { preset: 'last_30d', label: 'Last 30 days', from: null, to: null };
+let ATTR = '7d_click,1d_view';
+let step = 0, selAcctId = '', fetchedAccts = [], allPageTokens = [];
+let msgHistory = []; // for multi-turn context
+
+// ─── SETUP ────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', function() {
+  var uri = location.href.split('#')[0].split('?')[0];
+  var el = document.getElementById('redirect-uri');
+  if (el) el.textContent = uri;
+});
+
+function showTab(t) {
+  document.getElementById('tab-sdk').style.display = t === 'sdk' ? '' : 'none';
+  document.getElementById('tab-man').style.display = t === 'man' ? '' : 'none';
+  document.getElementById('tab-sdk-btn').style.background = t === 'sdk' ? 'linear-gradient(135deg,var(--acc),#a855f7)' : 'var(--s2)';
+  document.getElementById('tab-sdk-btn').style.color = t === 'sdk' ? '#fff' : 'var(--t2)';
+  document.getElementById('tab-man-btn').style.background = t === 'man' ? 'linear-gradient(135deg,var(--acc),#a855f7)' : 'var(--s2)';
+  document.getElementById('tab-man-btn').style.color = t === 'man' ? '#fff' : 'var(--t2)';
+}
+
+function doLogin() {
+  var appId = document.getElementById('inp-app-id').value.trim();
+  if (!appId || !/^\d+$/.test(appId)) { alert('Enter your numeric App ID.'); return; }
+  var redir = location.href.split('#')[0].split('?')[0];
+  var scope = 'ads_read,ads_management,pages_read_engagement,pages_show_list';
+  var url = 'https://www.facebook.com/dialog/oauth?client_id=' + appId +
+    '&redirect_uri=' + encodeURIComponent(redir) +
+    '&response_type=token&scope=' + encodeURIComponent(scope) + '&display=popup';
+  var st = document.getElementById('login-status');
+  st.style.color = 'var(--amb)'; st.textContent = 'Opening login popup…';
+  var pop = window.open(url, 'fb_auth', 'width=650,height=620,toolbar=no,menubar=no');
+  if (!pop) { st.style.color = 'var(--rose)'; st.textContent = '⚠️ Popup blocked — allow popups and retry.'; return; }
+  function onMsg(e) {
+    if (e.data && e.data.type === 'fb_oauth_token') {
+      window.removeEventListener('message', onMsg); clearInterval(poll);
+      FB_TOKEN = e.data.token; st.style.color = 'var(--grn)'; st.textContent = '✓ Logged in successfully. Click Next →';
+    }
+  }
+  window.addEventListener('message', onMsg);
+  var poll = setInterval(function() {
+    if (!pop || pop.closed) { clearInterval(poll); window.removeEventListener('message', onMsg); return; }
+    try {
+      var h = pop.location.hash;
+      if (h && h.includes('access_token')) {
+        clearInterval(poll); window.removeEventListener('message', onMsg);
+        var p = new URLSearchParams(h.replace(/^#/,''));
+        var tok = p.get('access_token');
+        if (tok) { pop.close(); FB_TOKEN = tok; st.style.color = 'var(--grn)'; st.textContent = '✓ Logged in. Click Next →'; }
+      }
+    } catch(e) {}
+  }, 400);
+  setTimeout(function() { clearInterval(poll); window.removeEventListener('message', onMsg); }, 180000);
+}
+
+async function stepNext() {
+  if (step === 0) {
+    var sdkVisible = document.getElementById('tab-sdk').style.display !== 'none';
+    if (sdkVisible) {
+      if (!FB_TOKEN) { alert('Please click "Login with Facebook" first.'); return; }
+    } else {
+      var raw = document.getElementById('inp-fb').value;
+      var tok = raw.split('').filter(function(c){return c.charCodeAt(0)>32&&c.charCodeAt(0)!==160;}).join('');
+      if (!tok || tok.length < 50) { alert('Paste a valid Facebook token.'); return; }
+      FB_TOKEN = tok;
+    }
+    CLAUDE_KEY = document.getElementById('inp-claude').value.trim();
+    if (!CLAUDE_KEY || !CLAUDE_KEY.startsWith('sk-ant-')) { alert('Please enter your Anthropic API key (starts with sk-ant-).'); return; }
+    PROXY_URL = document.getElementById('inp-proxy') ? document.getElementById('inp-proxy').value.trim().replace(/\/+$/, '') : '';
+    // Proxy is optional — we try direct Anthropic access first
+    goStep(1);
+    await loadAccounts();
+  } else if (step === 1) {
+    if (!selAcctId) { alert('Please select an ad account.'); return; }
+    AD_ACCOUNT = selAcctId;
+    ACCT_NAME = (fetchedAccts.find(function(a){return a.id===selAcctId;})||{}).name || selAcctId;
+    fetchPageTokens();
+    goStep(2);
+  } else if (step === 2) {
+    if (PERIOD.preset === 'custom') {
+      var f = document.getElementById('inp-from').value;
+      var t = document.getElementById('inp-to').value;
+      if (!f || !t) { alert('Pick both dates.'); return; }
+      PERIOD = { preset: null, label: f + ' → ' + t, from: f, to: t };
+    }
+    ATTR = document.getElementById('inp-attr').value;
+    document.getElementById('setupModal').style.display = 'none';
+    updateHeader();
+    bootChat();
+  }
+}
+
+function stepBack() { if (step > 0) goStep(step - 1); }
+
+function goStep(n) {
+  step = n;
+  document.querySelectorAll('.sp').forEach(function(el, i) { el.classList.toggle('active', i === n); });
+  ['pip0','pip1','pip2'].forEach(function(id, i) {
+    document.getElementById(id).className = 'pip' + (i < n ? ' done' : i === n ? ' active' : '');
+  });
+  document.getElementById('backBtn').style.display = n > 0 ? '' : 'none';
+  document.getElementById('nextBtn').textContent = n === 2 ? '🚀 Launch AI Brain' : 'Next →';
+}
+
+async function loadAccounts() {
+  var wrap = document.getElementById('acct-wrap'), err = document.getElementById('acct-err');
+  err.style.display = 'none';
+  wrap.innerHTML = '<div class="spin-row"><div class="spn"></div>Validating token with /me…</div>';
+  try {
+    var me = await jsonpGet(GRAPH + '/me?fields=id,name');
+    wrap.innerHTML = '<div class="spin-row" style="color:var(--grn)">✓ Logged in as ' + (me.name || me.id) + '. Fetching ad accounts…</div>';
+    await new Promise(function(r){setTimeout(r, 300);});
+    var d = await jsonpGet(GRAPH + '/me/adaccounts?fields=id,name,account_status,currency&limit=50');
+    fetchedAccts = d.data || [];
+    if (!fetchedAccts.length) throw new Error('No ad accounts found on this token.');
+    var sl = {1:'Active',2:'Disabled',3:'Unsettled',7:'Pending',201:'Closed'};
+    wrap.innerHTML = '<div class="acct-list">' + fetchedAccts.map(function(a) {
+      return '<div class="acct-card" id="ac_'+a.id+'" onclick="selAcct(\''+a.id+'\')"><input type="radio" name="acct"/><div class="acct-info"><div class="acct-name">'+(a.name||'Unnamed')+'</div><div class="acct-sub">'+a.id+' · '+(a.currency||'?')+'</div></div><span class="acct-stat '+(a.account_status===1?'on':'')+'">'+( sl[a.account_status]||'?')+'</span></div>';
+    }).join('') + '</div>';
+    if (fetchedAccts.length === 1) selAcct(fetchedAccts[0].id);
+  } catch(e) {
+    wrap.innerHTML = '';
+    err.innerHTML = '<b style="color:var(--rose)">'+e.message+'</b><br><span style="color:var(--t3)">Check token permissions: ads_read is required.</span>';
+    err.style.display = 'block';
+  }
+}
+
+function selAcct(id) {
+  selAcctId = id;
+  document.querySelectorAll('.acct-card').forEach(function(el){el.classList.remove('sel');el.querySelector('input').checked=false;});
+  var el = document.getElementById('ac_' + id);
+  if (el) { el.classList.add('sel'); el.querySelector('input').checked = true; }
+}
+
+async function fetchPageTokens() {
+  try {
+    var d = await jsonpGet(GRAPH + '/me/accounts?fields=id,name,access_token&limit=50');
+    allPageTokens = (d.data || []).map(function(p){return{id:p.id,name:p.name,token:p.access_token};});
+    if (allPageTokens.length) PAGE_TOKEN = allPageTokens[0].token;
+  } catch(e) { allPageTokens = []; }
+}
+
+function pickPeriod(val, label, btn) {
+  document.querySelectorAll('#sp2 .chip').forEach(function(b){b.classList.remove('on');});
+  btn.classList.add('on');
+  document.getElementById('custom-wrap').style.display = val === 'custom' ? 'block' : 'none';
+  if (val !== 'custom') { PERIOD = {preset:val,label:label,from:null,to:null}; document.getElementById('period-preview').textContent = 'Period: ' + label; }
+}
+
+function updateAttr(val) { ATTR = val; document.getElementById('attr-foot').textContent = 'Attr: ' + val.replace(',','+'); }
+
+function updateHeader() {
+  document.getElementById('statusDot').className = 'status-dot live';
+  document.getElementById('statusText').textContent = ACCT_NAME + ' · ' + PERIOD.label;
+  document.getElementById('periodBtn').textContent = '📅 ' + PERIOD.label;
+  document.getElementById('cur-period').textContent = 'Current: ' + PERIOD.label;
+  document.getElementById('attr-foot').textContent = 'Attr: ' + ATTR.replace(',','+');
+  document.getElementById('attr-select').value = ATTR;
+}
+
+// Date modal
+function qPeriod(preset, label, btn) {
+  PERIOD = {preset:preset,label:label,from:null,to:null};
+  document.querySelectorAll('#dateModal .chip').forEach(function(b){b.classList.remove('on');});
+  btn.classList.add('on');
+  document.getElementById('periodBtn').textContent = '📅 ' + label;
+  document.getElementById('statusText').textContent = ACCT_NAME + ' · ' + label;
+  document.getElementById('cur-period').textContent = 'Current: ' + label;
+  document.getElementById('dateModal').classList.remove('open');
+  ask('Switched to ' + label + '. Show me campaign performance for this period.');
+}
+
+function applyCustom() {
+  var f = document.getElementById('dm-from').value, t = document.getElementById('dm-to').value;
+  if (!f || !t) { alert('Select both dates.'); return; }
+  var label = f + ' → ' + t;
+  PERIOD = {preset:null,label:label,from:f,to:t};
+  document.getElementById('periodBtn').textContent = '📅 ' + label;
+  document.getElementById('statusText').textContent = ACCT_NAME + ' · ' + label;
+  document.getElementById('cur-period').textContent = 'Current: ' + label;
+  document.getElementById('dateModal').classList.remove('open');
+  ask('Switched to custom period: ' + label + '. Show me campaign performance.');
+}
+
+// ─── CHAT ─────────────────────────────────────────────────────────────────
+var $chat = document.getElementById('chat');
+var $cin  = document.getElementById('cin');
+var $send = document.getElementById('sendBtn');
+
+function bootChat() {
+  document.getElementById('welcome').remove();
+  addAiMsg('👋 Hi! I\'m your Facebook Ads AI. I\'m connected to **' + ACCT_NAME + '** and can analyse any aspect of your campaigns.\n\nI\'m using the **' + PERIOD.label + '** date range by default, with **' + ATTR + '** attribution. You can change both at any time — just ask or click the date button.\n\n**Important about date ranges:** If you ask for 7-day data and some campaigns ended mid-period, I\'ll still show you their data — if it falls within your requested window, it counts.\n\nWhat would you like to know?');
+}
+
+$cin.addEventListener('keydown', function(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+
+function ask(q) { $cin.value = q; send(); }
+
+async function send() {
+  var q = $cin.value.trim(); if (!q) return;
+  if (!FB_TOKEN || !CLAUDE_KEY) { document.getElementById('setupModal').style.display = 'flex'; return; }
+  $cin.value = ''; $send.disabled = true;
+  addUserMsg(q);
+  await processQuestion(q);
+  $send.disabled = false; $cin.focus();
+}
+
+function addUserMsg(text) {
+  var el = document.createElement('div');
+  el.className = 'msg user';
+  el.innerHTML = '<div class="bubble">' + escHtml(text) + '</div><div class="msg-avatar user-av">👤</div>';
+  $chat.appendChild(el); scroll();
+}
+
+function addAiMsg(md, dataHtml) {
+  var el = document.createElement('div');
+  el.className = 'msg ai';
+  var content = '<div class="msg-avatar ai-av">🧠</div><div class="bubble">' + mdToHtml(md);
+  if (dataHtml) content += dataHtml;
+  content += '</div>';
+  el.innerHTML = content;
+  $chat.appendChild(el); scroll();
+  return el;
+}
+
+function addThinking(steps) {
+  var el = document.createElement('div');
+  el.className = 'msg ai';
+  el.innerHTML = '<div class="msg-avatar ai-av">🧠</div><div class="think-bubble"><div class="think-dots"><span></span><span></span><span></span></div><div class="think-steps" id="think-steps">' +
+    steps.map(function(s,i){return '<div class="think-step" id="ts'+i+'">'+s+'</div>';}).join('') + '</div></div>';
+  $chat.appendChild(el); scroll();
+  return el;
+}
+
+function setThinkStep(i, state) {
+  var el = document.getElementById('ts' + i);
+  if (el) el.className = 'think-step ' + state;
+}
+
+function scroll() { $chat.scrollTop = $chat.scrollHeight; }
+
+// ─── AI BRAIN — MAIN PROCESSING ───────────────────────────────────────────
+// Architecture:
+// 1. Claude reads the question + context, produces a JSON data plan
+// 2. Execute the FB API calls from the plan
+// 3. Claude analyses the data and produces the answer
+
+// ─── INTENT SYSTEM ─────────────────────────────────────────────────────────
+// Instead of letting Claude generate arbitrary API calls (fragile),
+// Claude extracts INTENT + PARAMETERS, then we run pre-built tested FB calls.
+
+var INTENTS = {
+  CAMPAIGN_PERF:   'campaign performance, spend, impressions, CTR, CPC, conversions',
+  AD_PERF:         'ad-level breakdown, individual ad performance',
+  DAILY_TREND:     'daily trend, day by day, over time, spend over time',
+  CAMPAIGN_STATUS: 'which campaigns active, paused, ended, turned off, status',
+  COMMENTS:        'comments, what people say, feedback, sentiment',
+  REACTIONS:       'reactions, likes, love, engagement',
+  RECOMMENDATIONS: 'recommendations, suggestions, what should I do, optimize',
+  COST_EXPLAIN:    'cost, pricing, how much does this cost, billing',
+  ATTRIBUTION:     'attribution, conversion window, how conversions counted',
+  COMPARISON:      'compare, vs, versus, difference between',
+};
+
+// Extract intent and date range from question using Claude (tiny fast call)
+async function extractIntent(question) {
+  var today = new Date();
+  var todayStr = today.toISOString().slice(0,10);
+
+  // Calculate common date ranges
+  function daysAgo(n) {
+    var d = new Date(today); d.setDate(d.getDate()-n);
+    return d.toISOString().slice(0,10);
+  }
+  function monthStart(offset) {
+    var d = new Date(today.getFullYear(), today.getMonth()+offset, 1);
+    return d.toISOString().slice(0,10);
+  }
+  function monthEnd(offset) {
+    var d = new Date(today.getFullYear(), today.getMonth()+offset+1, 0);
+    return d.toISOString().slice(0,10);
+  }
+
+  var dateRef = 'Today: '+todayStr+'. last_7d='+daysAgo(7)+' to '+todayStr+
+    ', last_30d='+daysAgo(30)+' to '+todayStr+
+    ', April=2026-04-01 to 2026-04-30'+
+    ', March=2026-03-01 to 2026-03-31'+
+    ', this_month='+monthStart(0)+' to '+todayStr+
+    ', last_month='+monthStart(-1)+' to '+monthEnd(-1);
+
+  var intentList = Object.keys(INTENTS).map(function(k){return k+': '+INTENTS[k];}).join('\n');
+
+  var resp = await callClaude(
+    'You are a query parser. Output ONLY valid JSON, nothing else.',
+    [{role:'user', content:
+      'Parse this Facebook Ads question into intent + date range.\n'+
+      dateRef+'\n\n'+
+      'Available intents:\n'+intentList+'\n\n'+
+      'Question: "'+question+'"\n\n'+
+      'Output JSON only:\n'+
+      '{"intent":"CAMPAIGN_PERF","since":"2026-04-01","until":"2026-04-30","filter":"lead generation","level":"campaign"}\n'+
+      'Rules:\n'+
+      '- intent: pick best match from list above\n'+
+      '- since/until: date strings YYYY-MM-DD, or null to use default period\n'+
+      '- filter: keyword to filter results by name (null if none)\n'+
+      '- level: "all" (campaign+adset+ad, default), "campaign", "adset", or "ad"\n'+
+      '- filter: name keyword only — NEVER use an objective name as filter\n'+
+      'Output ONLY the JSON object, starting with { ending with }.'
+    }],
+    200
+  );
+
+  // Extract JSON robustly
+  var s = resp.indexOf('{'), e = resp.lastIndexOf('}');
+  if (s === -1 || e === -1) return {intent:'CAMPAIGN_PERF', since:null, until:null, filter:null, level:'all'};
+  try {
+    return JSON.parse(resp.slice(s, e+1));
+  } catch(err) {
+    return {intent:'CAMPAIGN_PERF', since:null, until:null, filter:null, level:'all'};
+  }
+}
+
+// Run the right FB API call based on intent
+// Always pulls campaign + adset + ad level simultaneously.
+// Never filters by objective — detects results from whichever action type has values.
+async function fetchForIntent(parsed) {
+  var since  = parsed.since  || (PERIOD.from  || null);
+  var until  = parsed.until  || (PERIOD.to    || null);
+  var preset = (!since && !until) ? (PERIOD.preset||'last_30d') : null;
+
+  function buildUrl(path, params) {
+    var url = GRAPH + path + '?';
+    var parts = [];
+    for (var k in params) {
+      var v = params[k];
+      if (v===null||v===undefined||v==='') continue;
+      if (typeof v==='object') v = JSON.stringify(v);
+      parts.push(encodeURIComponent(k)+'='+encodeURIComponent(v));
+    }
+    return url + parts.join('&');
+  }
+
+  function periodParams() {
+    return since && until ? {since:since, until:until} : {date_preset: preset};
+  }
+
+  // Fields pulled at every level — includes ALL result action types so we
+  // can detect leads, engagements, reach, link clicks — whichever fired.
+  var PERF_FIELDS = 'campaign_name,adset_name,ad_name,spend,impressions,reach,frequency,clicks,ctr,cpc,cpm,actions';
+  var ATTR_PARAM  = JSON.stringify(ATTR.split(','));
+
+  var intent = parsed.intent || 'CAMPAIGN_PERF';
+  var level  = parsed.level  || 'all';
+  var data   = {};
+
+  // ── Three-level pull for all performance intents ──────────────────────────
+  if (intent === 'CAMPAIGN_PERF' || intent === 'AD_PERF' ||
+      intent === 'COMPARISON'    || intent === 'RECOMMENDATIONS') {
+
+    var wantCampaign = (level === 'all' || level === 'campaign');
+    var wantAdset    = (level === 'all' || level === 'adset');
+    var wantAd       = (level === 'all' || level === 'ad');
+
+    var fetches = [];
+    if (wantCampaign) fetches.push(
+      jsonpGet(buildUrl('/'+AD_ACCOUNT+'/insights',
+        Object.assign({fields:PERF_FIELDS, level:'campaign',
+          action_attribution_windows:ATTR_PARAM}, periodParams())))
+        .then(function(d){ data.campaigns = d.data||[]; })
+    );
+    if (wantAdset) fetches.push(
+      jsonpGet(buildUrl('/'+AD_ACCOUNT+'/insights',
+        Object.assign({fields:PERF_FIELDS, level:'adset',
+          action_attribution_windows:ATTR_PARAM}, periodParams())))
+        .then(function(d){ data.adsets = d.data||[]; })
+    );
+    if (wantAd) fetches.push(
+      jsonpGet(buildUrl('/'+AD_ACCOUNT+'/insights',
+        Object.assign({fields:PERF_FIELDS, level:'ad',
+          action_attribution_windows:ATTR_PARAM}, periodParams())))
+        .then(function(d){ data.ads = d.data||[]; })
+    );
+    await Promise.all(fetches);
+  }
+
+  if (intent === 'DAILY_TREND') {
+    var tf = 'campaign_name,spend,impressions,reach,clicks,actions';
+    var dd = await jsonpGet(buildUrl('/'+AD_ACCOUNT+'/insights',
+      Object.assign({fields:tf, level:'account', time_increment:1,
+        action_attribution_windows:ATTR_PARAM}, periodParams())));
+    data.daily = dd.data||[];
+  }
+
+  if (intent === 'CAMPAIGN_STATUS') {
+    var cs = await jsonpGet(buildUrl('/'+AD_ACCOUNT+'/campaigns',
+      {fields:'id,name,status,effective_status,objective,start_time,stop_time,daily_budget,lifetime_budget', limit:100}));
+    data.campaign_status = cs.data||[];
+    var ci = await jsonpGet(buildUrl('/'+AD_ACCOUNT+'/insights',
+      Object.assign({fields:'campaign_name,spend,impressions,clicks,actions',
+        level:'campaign', action_attribution_windows:ATTR_PARAM}, periodParams())));
+    data.campaign_insights = ci.data||[];
+  }
+
+  if (intent === 'REACTIONS') {
+    var dr = await jsonpGet(buildUrl('/'+AD_ACCOUNT+'/insights',
+      Object.assign({fields:'campaign_name,adset_name,ad_name,actions',
+        level:'ad', action_attribution_windows:ATTR_PARAM}, periodParams())));
+    data.reactions = dr.data||[];
+  }
+
+  if (intent === 'COMMENTS') {
+    // Step 1: pull ads with their creative so we can get post IDs
+    var adsData = await jsonpGet(buildUrl('/'+AD_ACCOUNT+'/ads',
+      {fields:'id,name,creative{effective_object_story_id},adset_id', limit:20}));
+    var adsList = adsData.data || [];
+
+    // Step 2: for each ad that has a story ID, fetch comments via Page API
+    var commentRows = [];
+    var seen = {};
+    var pageToken = PAGE_TOKEN || FB_TOKEN;
+
+    var commentFetches = adsList.map(function(ad) {
+      var storyId = ad.creative && ad.creative.effective_object_story_id;
+      if (!storyId || seen[storyId]) return Promise.resolve();
+      seen[storyId] = true;
+      // effective_object_story_id format is pageId_postId
+      var postId = storyId; // Graph API accepts the full combined ID
+      return jsonpGet(buildUrl('/'+postId+'/comments',
+        {fields:'id,message,from,created_time,like_count,comment_count', limit:25, order:'ranked'}), pageToken)
+        .then(function(cd) {
+          (cd.data||[]).forEach(function(c) {
+            commentRows.push({
+              ad_id: ad.id,
+              ad_name: ad.name,
+              post_id: storyId,
+              comment_id: c.id,
+              message: c.message,
+              author: (c.from && c.from.name) || 'Unknown',
+              created_time: c.created_time,
+              likes: c.like_count || 0,
+              replies: c.comment_count || 0
+            });
+          });
+        })
+        .catch(function(e) {
+          // If this post's comments fail (permissions), log but keep going
+          commentRows.push({
+            ad_name: ad.name,
+            post_id: storyId,
+            error: e.message
+          });
+        });
+    });
+
+    await Promise.all(commentFetches);
+
+    // Also pull comment count from insights so we have a summary
+    var insightsData = await jsonpGet(buildUrl('/'+AD_ACCOUNT+'/insights',
+      Object.assign({fields:'campaign_name,adset_name,ad_name,actions',
+        level:'ad', action_attribution_windows:ATTR_PARAM}, periodParams())))
+      .catch(function(){ return {data:[]}; });
+
+    data.comment_insights = insightsData.data || [];
+    data.comments = commentRows;
+  }
+
+  // ── Filter by NAME keyword only — never by objective ─────────────────────
+  // Pull all rows then filter by campaign/adset/ad name containing the keyword.
+  // This ensures we catch campaigns regardless of their Meta objective setting.
+  if (parsed.filter) {
+    var kw = parsed.filter.toLowerCase().trim();
+    var filterByName = function(arr) {
+      if (!Array.isArray(arr)) return arr;
+      var filtered = arr.filter(function(r) {
+        return (r.campaign_name||'').toLowerCase().includes(kw) ||
+               (r.adset_name   ||'').toLowerCase().includes(kw) ||
+               (r.ad_name      ||'').toLowerCase().includes(kw);
+      });
+      // If name filter returns nothing, return all rows so we never get zero results
+      return filtered.length ? filtered : arr;
+    };
+    if (data.campaigns) data.campaigns = filterByName(data.campaigns);
+    if (data.adsets)    data.adsets    = filterByName(data.adsets);
+    if (data.ads)       data.ads       = filterByName(data.ads);
+  }
+
+  return { data:data, intent:intent, since:since||'default', until:until||'default', preset:preset };
+}
+
+// Compress data before sending to Claude
+function compress(data) {
+  // Action types we care about — leads, engagements, reach signals, reactions, clicks
+  var KEEP_ACTIONS = ['lead','onsite_conversion.lead_grouped','offsite_conversion.fb_pixel_lead',
+    'post_engagement','page_engagement','link_click','post_reaction','comment',
+    'video_view','complete_registration','purchase','offsite_conversion'];
+  var out = {};
+  for (var k in data) {
+    var rows = data[k];
+    if (!Array.isArray(rows)) { out[k]=rows; continue; }
+    out[k] = rows.slice(0,25).map(function(r) {
+      var c={};
+      for (var f in r) {
+        var v=r[f];
+        if (v===null||v===undefined||v===''||v==='0') continue;
+        if (typeof v==='number') v=Math.round(v*100)/100;
+        if (f==='actions'&&Array.isArray(v)) {
+          v=v.filter(function(a){
+            return KEEP_ACTIONS.some(function(t){ return (a.action_type||'').includes(t); });
+          }).map(function(a){return {t:a.action_type.replace('offsite_conversion.fb_pixel_','').replace('offsite_conversion.',''),v:a.value};});
+          if(!v.length) continue;
+        }
+        c[f]=v;
+      }
+      return c;
+    });
+    if(rows.length>25) out[k+'_truncated']='showing 25 of '+rows.length;
+  }
+  return out;
+}
+
+// ─── MAIN PROCESS QUESTION ────────────────────────────────────────────────
+async function processQuestion(question) {
+  var steps = ['Understanding intent…','Fetching Facebook data…','Analysing with Claude…'];
+  var thinking = addThinking(steps);
+  setThinkStep(0,'active');
+
+  try {
+    // No-fetch intents — answer directly
+    var directIntents = {
+      'COST_EXPLAIN': true,
+      'ATTRIBUTION': true,
+    };
+    var lower = question.toLowerCase();
+
+    // Quick check for non-data questions
+    var needsData = !(
+      (lower.includes('cost') && (lower.includes('how much') || lower.includes('price') || lower.includes('pricing'))) ||
+      (lower.includes('attribution') && !lower.includes('show') && !lower.includes('data'))
+    );
+
+    var result = null;
+    var intentParsed = null;
+
+    if (needsData) {
+      // Step 1: Extract intent
+      intentParsed = await extractIntent(question);
+      setThinkStep(0,'done'); setThinkStep(1,'active');
+
+      // Step 2: Fetch data
+      result = await fetchForIntent(intentParsed);
+      setThinkStep(1,'done');
+    } else {
+      setThinkStep(0,'done'); setThinkStep(1,'done');
+    }
+
+    setThinkStep(2,'active');
+
+    // Step 3: Claude analyses
+    var periodDesc = result
+      ? (result.since && result.since!=='default' ? result.since+' to '+result.until : 'period: '+(PERIOD.label))
+      : PERIOD.label;
+
+    var dataStr = result ? 'Data ('+periodDesc+', attribution '+ATTR+'):\n'+JSON.stringify(compress(result.data)) : '';
+    var filterNote = (intentParsed&&intentParsed.filter) ? ' [filtered by: "'+intentParsed.filter+'"]' : '';
+
+    var sysPrompt = 'You are an expert Facebook Ads analyst. Account: '+ACCT_NAME+'. Period: '+periodDesc+filterNote+'. Attribution: '+ATTR+'. Rules: (1) Always state period+attribution. (2) Bold key numbers. (3) Data is pulled at campaign, ad set, AND ad level simultaneously — reference all three when relevant. (4) Results metric is detected dynamically — could be leads, engagements, reach, link clicks, or reactions depending on campaign type. Use whichever metric has non-zero values. (5) CPL/Cost-per-result = spend ÷ results. (6) Never report zero results for a campaign just because its objective does not match "lead generation" — look at the actual actions data. (7) Facebook objective names: OUTCOME_LEADS=lead gen, OUTCOME_AWARENESS=awareness, OUTCOME_TRAFFIC=traffic, OUTCOME_ENGAGEMENT=engagement, OUTCOME_SALES=conversions. (8) Lead count is in action_type "lead" or "lead_grouped". Engagement in "post_engagement" or "page_engagement". (9) For comments data: data.comments contains live comments fetched directly from the ad post. Each has: message, author, created_time, likes, replies, ad_name. Summarise themes, tone, recurring questions or complaints. If data.comments is empty but data.comment_insights exists, use the comment action count from insights and explain the token needs pages_read_engagement permission to show full comments.';
+
+    var userMsg = dataStr
+      ? dataStr + '\n\nQuestion: ' + question + '\n\nAnswer concisely using the data above.'
+      : 'Question: ' + question + '\n\nAnswer concisely. No Facebook data needed for this.';
+
+    var answer = await callClaude(sysPrompt, [{role:'user',content:userMsg}], 1500);
+
+    thinking.remove();
+
+    var dataHtml = result ? buildDataVisuals(result.data, question) : '';
+    addAiMsg(answer, dataHtml);
+
+    msgHistory.push({role:'user',content:question});
+    msgHistory.push({role:'assistant',content:answer});
+    if(msgHistory.length>16) msgHistory=msgHistory.slice(-16);
+
+  } catch(e) {
+    thinking.remove();
+    var msg = e.message||'Unknown error';
+    addAiMsg('❌ **'+msg+'**');
+  }
+}
+
+// ─── BUILD DATA VISUALS FROM RAW DATA ─────────────────────────────────────
+function buildDataVisuals(data, question) {
+  var html = '';
+
+  // Render each level separately: campaigns → adsets → ads
+  var LEVEL_ORDER = [
+    { key:'campaigns', label:'📊 Campaign Level' },
+    { key:'adsets',    label:'📋 Ad Set Level' },
+    { key:'ads',       label:'🎯 Ad Level' },
+  ];
+
+  LEVEL_ORDER.forEach(function(lvl) {
+    var rows = data[lvl.key];
+    if (!rows || !Array.isArray(rows) || !rows.length) return;
+    html += buildPerfTable(rows, lvl.label);
+  });
+
+  // Non-performance data types
+  for (var key in data) {
+    if (key==='campaigns'||key==='adsets'||key==='ads') continue;
+    var rows = data[key];
+    if (!rows || rows.error || !Array.isArray(rows) || !rows.length) continue;
+    var first = rows[0];
+    if (key === 'comments')                     html += buildCommentCards(rows);
+    else if (first.effective_status !== undefined)  html += buildStatusTable(rows);
+    else if (first.message !== undefined)       html += buildCommentCards(rows);
+    else if (first.date_start !== undefined && rows.length > 1) html += buildDailyChart(rows);
+  }
+  return html;
+}
+
+// ── Detect the primary result metric from an array of rows ─────────────────
+// Scans actions array across all rows and picks the most-represented metric.
+// Priority: leads > engagements > link_clicks > reach (impressions fallback)
+function detectResultMetric(rows) {
+  var CANDIDATES = [
+    { label:'Leads',        types:['lead','lead_grouped','fb_pixel_lead'],         color:'vio' },
+    { label:'Engagements',  types:['post_engagement','page_engagement'],           color:'sky' },
+    { label:'Link Clicks',  types:['link_click'],                                  color:'grn' },
+    { label:'Reactions',    types:['post_reaction'],                               color:'amb' },
+    { label:'Video Views',  types:['video_view'],                                  color:'sky' },
+  ];
+
+  var counts = CANDIDATES.map(function(){ return 0; });
+  rows.forEach(function(r) {
+    if (!Array.isArray(r.actions)) return;
+    r.actions.forEach(function(a) {
+      var t = (a.action_type||'').toLowerCase();
+      CANDIDATES.forEach(function(c, i) {
+        if (c.types.some(function(ct){ return t.includes(ct); })) counts[i]++;
+      });
+    });
+  });
+
+  var best = 0;
+  for (var i=1; i<counts.length; i++) { if (counts[i]>counts[best]) best=i; }
+
+  // If nothing found, fall back to reach
+  if (counts[best] === 0) return { label:'Reach', types:['reach'], color:'sky', useField:'reach' };
+  return CANDIDATES[best];
+}
+
+// Extract result value for a row given the detected metric
+function extractResult(row, metric) {
+  if (metric.useField) return +row[metric.useField]||0;
+  if (!Array.isArray(row.actions)) return 0;
+  var total = 0;
+  row.actions.forEach(function(a) {
+    var t = (a.action_type||'').toLowerCase();
+    if (metric.types.some(function(ct){ return t.includes(ct); })) total += +a.value||0;
+  });
+  return total;
+}
+
+function buildPerfTable(rows, title) {
+  var sorted = rows.slice().sort(function(a,b){ return (+b.spend||0)-(+a.spend||0); });
+
+  // Detect primary result metric for this dataset
+  var metric = detectResultMetric(sorted);
+
+  var tS  = sorted.reduce(function(s,r){ return s+(+r.spend||0); },0);
+  var tI  = sorted.reduce(function(s,r){ return s+(+r.impressions||0); },0);
+  var tRe = sorted.reduce(function(s,r){ return s+(+r.reach||0); },0);
+  var tR  = sorted.reduce(function(s,r){ return s+extractResult(r,metric); },0);
+  var tC  = sorted.reduce(function(s,r){ return s+(+r.clicks||0); },0);
+
+  var cpr = (tR && tS) ? '$'+(tS/tR).toFixed(2) : '—';
+
+  // Determine name column key by what's present
+  var nameKey = 'campaign_name';
+  if (sorted[0] && sorted[0].ad_name)    nameKey = 'ad_name';
+  else if (sorted[0] && sorted[0].adset_name && !title.includes('Campaign')) nameKey = 'adset_name';
+
+  var kpiHtml = '<div class="kpi-grid g4">' +
+    '<div class="kpi grn"><div class="kl">SPEND</div><div class="kv">$'+fmt(tS)+'</div></div>'+
+    '<div class="kpi sky"><div class="kl">IMPRESSIONS</div><div class="kv">'+fmtK(tI)+'</div><div class="ks">reach '+fmtK(tRe)+'</div></div>'+
+    '<div class="kpi '+metric.color+'"><div class="kl">'+metric.label.toUpperCase()+'</div><div class="kv">'+fmt(tR)+'</div><div class="ks">cost/result '+cpr+'</div></div>'+
+    '<div class="kpi"><div class="kl">CLICKS</div><div class="kv">'+fmt(tC)+'</div><div class="ks">CTR '+(tI?(tC/tI*100).toFixed(2):0)+'%</div></div>'+
+    '</div>';
+
+  var tblRows = sorted.map(function(r) {
+    var res   = extractResult(r, metric);
+    var cprRow= (res && +r.spend) ? '$'+(+r.spend/res).toFixed(2) : '—';
+    var status = r.effective_status||r.campaign_status||'';
+    var sbadge = status ? '<span class="badge '+statusCls(status)+'" style="margin-left:6px">'+status+'</span>' : '';
+    var name = (r[nameKey]||r.campaign_name||r.adset_name||r.ad_name||'—').slice(0,50);
+    return '<tr>'+
+      '<td>'+escHtml(name)+sbadge+'</td>'+
+      '<td>$'+fmt(r.spend)+'</td>'+
+      '<td>'+fmtK(r.impressions)+'</td>'+
+      '<td>'+fmtK(r.reach)+'</td>'+
+      '<td>'+(res?fmt(res):'—')+'</td>'+
+      '<td>'+cprRow+'</td>'+
+      '<td>'+(+r.cpm||0).toFixed(2)+'</td>'+
+      '<td>'+(+r.frequency||0).toFixed(2)+'</td>'+
+      '</tr>';
+  }).join('');
+
+  // Bar chart — top metric is result count, secondary is spend
+  var maxR = Math.max.apply(null, sorted.map(function(r){return extractResult(r,metric);})) || 1;
+  var barsHtml = sorted.slice(0,8).map(function(r){
+    var res = extractResult(r,metric);
+    var lbl = (r[nameKey]||r.campaign_name||r.adset_name||r.ad_name||'').slice(0,32);
+    return '<div class="bar-row">'+
+      '<div class="bar-lbl">'+escHtml(lbl)+'</div>'+
+      '<div class="bar-track"><div class="bar-fill" style="width:'+Math.round(res/maxR*100)+'%"></div></div>'+
+      '<div class="bar-val">'+fmt(res)+' '+metric.label.toLowerCase()+'</div></div>';
+  }).join('');
+
+  var cid = 'c'+Date.now()+Math.random().toString(36).slice(2,6);
+  var chartHtml = '<div class="ch-wrap" style="height:180px"><canvas id="'+cid+'"></canvas></div>';
+  setTimeout(function(){
+    var el = document.getElementById(cid);
+    if (!el) return;
+    var labels = sorted.slice(0,8).map(function(r){
+      return (r[nameKey]||r.campaign_name||r.adset_name||r.ad_name||'').slice(0,22);
+    });
+    new Chart(el,{type:'bar',data:{labels:labels,datasets:[
+      {label:'Spend ($)',data:sorted.slice(0,8).map(function(r){return +r.spend||0;}),backgroundColor:'rgba(124,58,237,.55)',borderRadius:4,yAxisID:'y'},
+      {label:metric.label,data:sorted.slice(0,8).map(function(r){return extractResult(r,metric);}),backgroundColor:'rgba(34,197,94,.5)',borderRadius:4,yAxisID:'y2'}
+    ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{labels:{color:tc,font:{size:10,family:'JetBrains Mono'}}}},scales:{x:{grid:{display:false},ticks:{color:tc,font:{size:10},maxRotation:35},border:{color:gc}},y:{grid:{color:gc},ticks:{color:tc,font:{size:10},callback:function(v){return '$'+v;}},border:{color:'transparent'}},y2:{position:'right',grid:{display:false},ticks:{color:tc,font:{size:10}},border:{color:'transparent'}}}}});
+  },100);
+
+  var attrTag = '<span class="attr-tag">'+ATTR+'</span>';
+  return '<div class="data-block"><div class="db-head"><div class="db-title">'+escHtml(title)+'</div><div class="db-meta">'+PERIOD.label+' · '+attrTag+' · '+rows.length+' rows · primary metric: '+metric.label+'</div></div>'+
+    '<div class="db-body">'+kpiHtml+barsHtml+
+    '<div class="tbl-wrap" style="margin-top:14px"><table class="tbl"><thead><tr>'+
+    '<th>Name</th><th>Spend</th><th>Impr</th><th>Reach</th>'+
+    '<th>'+metric.label+'</th><th>Cost/Result</th><th>CPM</th><th>Freq</th>'+
+    '</tr></thead><tbody>'+tblRows+'</tbody></table></div>'+chartHtml+'</div></div>';
+}
+
+function buildStatusTable(rows) {
+  var groups = {ACTIVE:[],PAUSED:[],ARCHIVED:[],DELETED:[]};
+  rows.forEach(function(r){
+    var s = (r.effective_status||'UNKNOWN').toUpperCase();
+    if (!groups[s]) groups[s] = [];
+    groups[s].push(r);
+  });
+  var summary = Object.entries(groups).filter(function(e){return e[1].length>0;}).map(function(e){
+    return '<span class="badge '+statusCls(e[0])+'" style="margin-right:6px">'+e[0]+': '+e[1].length+'</span>';
+  }).join('');
+  return '<div class="data-block"><div class="db-head"><div class="db-title">Ad/Campaign Status</div><div class="db-meta">' + rows.length + ' total</div></div><div class="db-body" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">' + summary + '</div></div>';
+}
+
+function buildCommentCards(rows) {
+  if (!rows.length) return '';
+  var realComments = rows.filter(function(c){ return !c.error && c.message; });
+  var errorRows    = rows.filter(function(c){ return c.error; });
+  var html = '<div class="data-block"><div class="db-head"><div class="db-title">💬 Ad Comments</div><div class="db-meta">' + realComments.length + ' comments' + (errorRows.length ? ' · ' + errorRows.length + ' ads unavailable' : ' · live from Facebook') + '</div></div><div class="db-body">';
+  if (!realComments.length && errorRows.length) {
+    html += '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:var(--amb);padding:8px 0">⚠️ Comments could not be fetched. Token may need <strong>pages_read_engagement</strong> permission.</div>';
+    errorRows.forEach(function(e){
+      html += '<div class="cc unk"><div class="cc-meta"><span>🎯 ' + escHtml(e.ad_name || e.post_id || 'Unknown ad') + '</span></div><div class="cc-txt" style="color:var(--rose)">' + escHtml(e.error) + '</div></div>';
+    });
+    return html + '</div></div>';
+  }
+  realComments.slice(0,30).forEach(function(c){
+    var s = c.sentiment || 'unk';
+    var cls = s==='positive'?'pos':s==='negative'?'neg':s==='neutral'?'neu':'unk';
+    var author = c.author || (c.from && c.from.name) || 'Anon';
+    var likes  = c.likes !== undefined ? c.likes : (c.like_count || 0);
+    var replies = c.replies || 0;
+    var adLabel = c.ad_name ? '<span>🎯 ' + escHtml(c.ad_name) + '</span>' : '';
+    html += '<div class="cc ' + cls + '"><div class="cc-meta"><span>👤 ' + escHtml(author) + '</span>' + (c.created_time ? '<span>📅 ' + c.created_time.slice(0,10) + '</span>' : '') + '<span>👍 ' + likes + '</span>' + (replies ? '<span>💬 ' + replies + ' replies</span>' : '') + adLabel + '</div><div class="cc-txt">' + escHtml(c.message || '') + '</div></div>';
+  });
+  if (realComments.length > 30) html += '<div style="text-align:center;font-family:\'JetBrains Mono\',monospace;font-size:10px;color:var(--t3);padding:10px">Showing 30 of ' + realComments.length + ' comments</div>';
+  if (errorRows.length) html += '<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:var(--t3);margin-top:8px">⚠️ ' + errorRows.length + ' ad(s) unavailable — may need <code>pages_read_engagement</code> permission.</div>';
+  return html + '</div></div>';
+}
+
+function buildDailyChart(rows) {
+  var sorted = rows.slice().sort(function(a,b){return a.date_start>b.date_start?1:-1;});
+  var cid = 'c' + Date.now();
+  setTimeout(function(){
+    var el = document.getElementById(cid);
+    if (!el) return;
+    new Chart(el,{type:'bar',data:{labels:sorted.map(function(r){return r.date_start.slice(5);}),datasets:[
+      {label:'Spend',data:sorted.map(function(r){return +r.spend||0;}),backgroundColor:'rgba(124,58,237,.5)',borderRadius:3,order:2,yAxisID:'y'},
+      {label:'Clicks',data:sorted.map(function(r){return +r.clicks||0;}),type:'line',borderColor:'rgba(34,197,94,.9)',backgroundColor:'rgba(34,197,94,.07)',fill:true,tension:.4,pointRadius:2,borderWidth:2,order:1,yAxisID:'y2'}
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:tc,font:{size:10,family:'JetBrains Mono'}}}},scales:{x:{grid:{display:false},ticks:{color:tc,font:{size:10},maxRotation:45,autoSkip:true,maxTicksLimit:16},border:{color:gc}},y:{grid:{color:gc},ticks:{color:tc,font:{size:10},callback:function(v){return '$'+v;}},border:{color:'transparent'}},y2:{position:'right',grid:{display:false},ticks:{color:tc,font:{size:10}},border:{color:'transparent'}}}}});
+  },100);
+  return '<div class="data-block"><div class="db-head"><div class="db-title">📈 Daily Trend</div><div class="db-meta">' + sorted.length + ' days · ' + PERIOD.label + '</div></div><div class="db-body"><div class="ch-wrap" style="height:200px"><canvas id="' + cid + '"></canvas></div></div></div>';
+}
+
+// ─── CLAUDE API ────────────────────────────────────────────────────────────
+// Strategy: try direct Anthropic call first (with browser-access header),
+// then fall back to Cloudflare proxy if PROXY_URL is set.
+async function callClaude(systemPrompt, messages, maxTokens) {
+  var body = JSON.stringify({
+    model: 'claude-sonnet-4-6',
+    max_tokens: maxTokens || 1500,
+    system: systemPrompt,
+    messages: messages
+  });
+
+  var endpoints = [];
+
+  // Try 1: direct Anthropic with browser access header
+  endpoints.push({
+    url: 'https://api.anthropic.com/v1/messages',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': CLAUDE_KEY,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    }
+  });
+
+  // Try 2: Cloudflare proxy (if configured)
+  if (PROXY_URL) {
+    endpoints.push({
+      url: PROXY_URL,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': CLAUDE_KEY,
+        'anthropic-version': '2023-06-01'
+      }
+    });
+  }
+
+  var lastErr = null;
+  for (var i = 0; i < endpoints.length; i++) {
+    var ep = endpoints[i];
+    try {
+      var r = await fetch(ep.url, { method: 'POST', headers: ep.headers, body: body });
+      if (!r.ok) {
+        var errBody;
+        try { errBody = await r.json(); } catch(e) { throw new Error('HTTP ' + r.status); }
+        throw new Error('[Claude API] ' + ((errBody.error && (errBody.error.type + ': ' + errBody.error.message)) || errBody.message || ('HTTP ' + r.status)));
+      }
+      var d = await r.json();
+      return (d.content && d.content[0] && d.content[0].text) || '';
+    } catch(e) {
+      lastErr = e;
+      // If CORS/network error, try next endpoint
+      if (e.message === 'Failed to fetch' || e.message.includes('NetworkError') || e.message.includes('CORS')) continue;
+      // For auth/API errors (not network), don't retry — throw immediately
+      throw e;
+    }
+  }
+
+  // All endpoints failed
+  var msg = lastErr ? lastErr.message : 'Unknown error';
+  if (msg === 'Failed to fetch' || msg.includes('NetworkError')) {
+    throw new Error('CORS error — Claude API unreachable from browser. Add a Cloudflare Worker proxy URL in Setup (optional field).');
+  }
+  throw lastErr || new Error('Claude API unreachable');
+}
+
+// ─── JSONP ────────────────────────────────────────────────────────────────
+function jsonpGet(url, tokenOverride) {
+  return new Promise(function(resolve, reject) {
+    var cb = '_fb' + Date.now() + Math.random().toString(36).slice(2);
+    var tok = tokenOverride || FB_TOKEN;
+    var sep = url.includes('?') ? '&' : '?';
+    var fullUrl = url + sep + 'callback=' + cb + '&access_token=' + encodeURIComponent(tok);
+    var timer = setTimeout(function(){ cleanup(); reject(new Error('Timeout fetching: ' + url.slice(0,60))); }, 20000);
+    function cleanup() { clearTimeout(timer); delete window[cb]; if (s.parentNode) s.parentNode.removeChild(s); }
+    window[cb] = function(data) {
+      cleanup();
+      if (data && data.error) {
+        var e = new Error(data.error.message + ' (code ' + data.error.code + ')');
+        e.fbCode = data.error.code;
+        e.tokenExpired = data.error.code === 190;
+        reject(e);
+      } else resolve(data);
+    };
+    var s = document.createElement('script');
+    s.src = fullUrl;
+    s.onerror = function() { cleanup(); reject(new Error('Network error loading FB API')); };
+    document.head.appendChild(s);
+  });
+}
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────
+function statusCls(s) {
+  s = (s||'').toUpperCase();
+  if (s === 'ACTIVE') return 'active';
+  if (s === 'PAUSED') return 'paused';
+  if (s === 'ARCHIVED' || s === 'COMPLETED') return 'ended';
+  if (s === 'DELETED') return 'deleted';
+  return 'ended';
+}
+
+function escHtml(t) { return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function mdToHtml(md) {
+  return md
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,'<em>$1</em>')
+    .replace(/`(.+?)`/g,'<code>$1</code>')
+    .replace(/^### (.+)$/gm,'<h4 style="font-size:12px;font-weight:700;color:var(--t1);margin:12px 0 5px;text-transform:uppercase;letter-spacing:.06em">$1</h4>')
+    .replace(/^## (.+)$/gm,'<h3 style="font-size:13px;font-weight:700;color:var(--t1);margin:14px 0 6px">$1</h3>')
+    .replace(/^# (.+)$/gm,'<h2 style="font-size:15px;font-weight:700;color:var(--t1);margin:14px 0 6px">$1</h2>')
+    .replace(/^\- (.+)$/gm,'<li style="margin-left:14px;margin-bottom:3px">$1</li>')
+    .replace(/^(\d+)\. (.+)$/gm,'<li style="margin-left:14px;margin-bottom:3px"><strong>$1.</strong> $2</li>')
+    .replace(/\n\n/g,'</p><p>')
+    .replace(/\n/g,'<br>')
+    .replace(/^/,'<p>').replace(/$/,'</p>');
+}
+
+const fmt  = function(n) { return Math.round(+n||0).toLocaleString(); };
+const fmtK = function(n) { n=+n||0; return n>=1e6?(n/1e6).toFixed(1)+'M':n>=1000?(n/1000).toFixed(1)+'k':String(Math.round(n)); };
+const tc = 'rgba(250,250,250,.28)', gc = 'rgba(255,255,255,.04)';
+</script>
+</body>
+</html>
