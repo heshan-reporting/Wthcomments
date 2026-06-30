@@ -238,271 +238,6 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 .example-q .eq-icon{font-size:20px;margin-bottom:8px}
 .example-q .eq-txt{font-size:12px;font-weight:500;color:var(--t1);line-height:1.5}
 .example-q .eq-sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);margin-top:4px}
-
-
-/* ═══ PRODUCTION ENHANCEMENTS ══════════════════════════════════════════════ */
-
-/* Extra animation keyframes */
-@keyframes msgIn{
-  from{opacity:0;transform:translateY(14px) scale(0.98)}
-  to  {opacity:1;transform:translateY(0) scale(1)}
-}
-@keyframes wave{
-  0%,60%,100%{transform:translateY(0);opacity:.3}
-  30%{transform:translateY(-8px);opacity:1}
-}
-@keyframes shimmer{
-  0%  {background-position:200% 0}
-  100%{background-position:-200% 0}
-}
-@keyframes glowPulse{
-  0%,100%{box-shadow:0 0 0 0 rgba(124,58,237,.4)}
-  50%    {box-shadow:0 0 0 8px rgba(124,58,237,0)}
-}
-@keyframes rotateGrad{
-  0%  {background-position:0% 50%}
-  50% {background-position:100% 50%}
-  100%{background-position:0% 50%}
-}
-@keyframes fadeScaleIn{
-  from{opacity:0;transform:scale(0.94)}
-  to  {opacity:1;transform:scale(1)}
-}
-
-/* ── Upgrade body scanlines to subtler grain ── */
-body::after{background:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E") repeat;opacity:.6;pointer-events:none;z-index:9999;position:fixed;inset:0;content:''}
-
-/* ── Ambient glow behind chat ── */
-.main::before{
-  content:'';position:absolute;top:-60px;left:50%;transform:translateX(-50%);
-  width:70%;height:300px;
-  background:radial-gradient(ellipse at 50% 0%,rgba(124,58,237,.07) 0%,transparent 65%);
-  pointer-events:none;z-index:0;
-}
-.main{position:relative}
-.chat,.input-zone{position:relative;z-index:1}
-
-/* ── Message slide-in ── */
-.msg{animation:msgIn .28s cubic-bezier(.22,.68,0,1.2) both}
-
-/* ── User bubble: glass with gradient glow ── */
-.msg.user .bubble{
-  background:linear-gradient(135deg,rgba(124,58,237,.35),rgba(168,85,247,.28));
-  border:1px solid rgba(168,85,247,.3);
-  box-shadow:0 4px 20px rgba(124,58,237,.15),inset 0 1px 0 rgba(255,255,255,.1);
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-  border-radius:18px 18px 4px 18px;
-}
-
-/* ── AI bubble: glass card with subtle left accent ── */
-.msg.ai .bubble{
-  background:rgba(255,255,255,0.025);
-  border:1px solid rgba(255,255,255,.07);
-  border-left:2px solid rgba(124,58,237,.4);
-  box-shadow:0 2px 16px rgba(0,0,0,.3);
-  border-radius:4px 16px 16px 16px;
-}
-
-/* ── AI avatar: gradient orb instead of flat square ── */
-.msg-avatar.ai-av{
-  background:radial-gradient(circle at 30% 30%,#00ffff,transparent 45%),
-    radial-gradient(circle at 70% 30%,#7f00ff,transparent 45%),
-    radial-gradient(circle at 50% 80%,#ff00aa,transparent 45%);
-  border-radius:50%;
-  filter:blur(1px);
-  box-shadow:0 0 12px rgba(124,58,237,.4);
-}
-
-/* ── Wave thinking indicator ── */
-.think-bubble{
-  background:rgba(255,255,255,.03);
-  border:1px solid rgba(255,255,255,.08);
-  border-left:2px solid rgba(124,58,237,.5);
-  box-shadow:0 2px 16px rgba(0,0,0,.3);
-  border-radius:4px 16px 16px 16px;
-  gap:14px;
-}
-.think-dots span{
-  width:7px;height:7px;
-  animation:wave 1.4s ease-in-out infinite;
-}
-.think-dots span:nth-child(1){background:#00e5ff;animation-delay:0s}
-.think-dots span:nth-child(2){background:#8b5cf6;animation-delay:.18s}
-.think-dots span:nth-child(3){background:#f472b6;animation-delay:.36s}
-.think-lbl{font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(255,255,255,.4);font-weight:500}
-
-/* ── Think steps with better visual hierarchy ── */
-.think-steps{
-  border-left:1px solid rgba(124,58,237,.25);
-  margin-left:0;padding:4px 10px;
-}
-.think-step{
-  padding:3px 0;font-size:10px;color:rgba(255,255,255,.25);
-  transition:all .4s ease;
-}
-.think-step.done{color:rgba(34,197,94,.8)}
-.think-step.active{
-  color:rgba(245,158,11,.9);
-  text-shadow:0 0 12px rgba(245,158,11,.3);
-}
-.think-step.active::before{content:'▶ '}
-.think-step.done::before{content:'✓ '}
-
-/* ── Input row: gradient glow on focus ── */
-.input-row{transition:border-color .2s,box-shadow .2s}
-.input-row:focus-within{
-  border-color:rgba(124,58,237,.5);
-  box-shadow:0 0 0 3px rgba(124,58,237,.1),0 4px 20px rgba(124,58,237,.08);
-}
-.chat-in{caret-color:#a855f7}
-
-/* ── Send button pulse on hover ── */
-.send-btn:hover{
-  opacity:1;
-  box-shadow:0 0 0 4px rgba(124,58,237,.15),0 4px 16px rgba(124,58,237,.3);
-  transform:scale(1.05);
-}
-.send-btn{transition:all .2s}
-
-/* ── Quick question chips: glass ── */
-.qq{
-  background:rgba(255,255,255,.03);
-  border-color:rgba(255,255,255,.07);
-  transition:all .18s;
-}
-.qq:hover{
-  border-color:rgba(124,58,237,.4);color:rgba(168,85,247,.9);
-  background:rgba(124,58,237,.07);
-  transform:translateY(-1px);
-  box-shadow:0 4px 12px rgba(124,58,237,.1);
-}
-
-/* ── Sidebar active item ── */
-.sb-item:hover{
-  background:rgba(124,58,237,.07);
-  border-left-color:rgba(124,58,237,.6);
-  color:rgba(255,255,255,.85);
-}
-.sb-item.active{
-  background:rgba(124,58,237,.08);
-  border-left-color:#7c3aed;
-  color:#a78bfa;
-}
-.sb-label{letter-spacing:.14em;opacity:.6}
-
-/* ── Header: gradient underline ── */
-.header::after{
-  content:'';position:absolute;bottom:0;left:0;right:0;height:1px;
-  background:linear-gradient(90deg,transparent,rgba(124,58,237,.3) 30%,rgba(168,85,247,.3) 70%,transparent);
-}
-.header{border-bottom:none;position:relative}
-
-/* ── Logo mark: orb instead of flat square ── */
-.logo-mark{
-  background:radial-gradient(circle at 35% 30%,#00ffff,transparent 50%),
-    radial-gradient(circle at 70% 30%,#7f00ff,transparent 50%),
-    radial-gradient(circle at 50% 80%,#ff00aa,transparent 50%);
-  border-radius:50%;filter:blur(1.5px);
-  box-shadow:0 0 16px rgba(124,58,237,.5);
-  font-size:0;
-}
-
-/* ── Status pill enhancement ── */
-.status-pill{
-  background:rgba(255,255,255,.03);
-  border:1px solid rgba(255,255,255,.06);
-  backdrop-filter:blur(8px);
-}
-.status-dot.live{animation:glowPulse 2s ease-in-out infinite}
-
-/* ── Welcome screen: gradient headline ── */
-.welcome h1{
-  background:linear-gradient(135deg,#e0d7ff 0%,#a78bfa 40%,#f472b6 80%);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
-  font-size:30px;
-}
-.welcome p{color:rgba(255,255,255,.5)}
-.welcome-icon{
-  background:radial-gradient(circle at 35% 30%,#00ffff,transparent 50%),
-    radial-gradient(circle at 70% 30%,#7f00ff,transparent 50%),
-    radial-gradient(circle at 50% 80%,#ff00aa,transparent 50%);
-  filter:blur(2px);
-  box-shadow:0 0 30px rgba(124,58,237,.4),0 0 60px rgba(124,58,237,.15);
-  border-radius:50%;font-size:0;
-}
-
-/* ── Welcome example cards: glass ── */
-.example-q{
-  background:rgba(255,255,255,.03);
-  border:1px solid rgba(255,255,255,.07);
-  transition:all .22s cubic-bezier(.22,.68,0,1.2);
-  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
-}
-.example-q:hover{
-  border-color:rgba(124,58,237,.4);
-  background:rgba(124,58,237,.06);
-  transform:translateY(-3px) scale(1.01);
-  box-shadow:0 8px 30px rgba(124,58,237,.15);
-}
-.example-qs{animation:fadeScaleIn .4s ease .1s both}
-.welcome h1{animation:msgIn .4s ease both}
-.welcome p{animation:msgIn .4s ease .08s both}
-
-/* ── KPI cards: hover lift ── */
-.kpi{transition:all .2s cubic-bezier(.22,.68,0,1.2)}
-.kpi:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.3);border-color:rgba(255,255,255,.12)}
-.kv{background:transparent}
-
-/* ── Data blocks: glass ── */
-.data-block{background:rgba(255,255,255,.02);border-color:rgba(255,255,255,.07)}
-.db-head{background:rgba(255,255,255,.04)}
-
-/* ── Shimmer on data-block while loading ── */
-.data-block[data-loading]::after{
-  content:'';position:absolute;inset:0;
-  background:linear-gradient(90deg,transparent,rgba(255,255,255,.04) 50%,transparent);
-  background-size:200% 100%;
-  animation:shimmer 1.6s linear infinite;pointer-events:none;border-radius:inherit;
-}
-.data-block{position:relative;overflow:hidden}
-
-/* ── Comment cards: glass ── */
-.cc{background:rgba(255,255,255,.025);border-color:rgba(255,255,255,.06)}
-.cc:hover{border-color:rgba(255,255,255,.1)}
-
-/* ── Table rows: subtle hover ── */
-.tbl tr:hover td{background:rgba(124,58,237,.04)}
-
-/* ── Scrollbar styling ── */
-.chat{scrollbar-width:thin;scrollbar-color:rgba(124,58,237,.3) transparent}
-.chat::-webkit-scrollbar-thumb{background:rgba(124,58,237,.3);border-radius:2px}
-
-/* ── Setup modal: glass ── */
-.modal{
-  background:rgba(13,13,17,.95);
-  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
-  border:1px solid rgba(255,255,255,.08);
-  box-shadow:0 24px 80px rgba(0,0,0,.8);
-  animation:fadeScaleIn .2s ease;
-}
-.overlay{background:rgba(0,0,0,.8)}
-.qbox{
-  background:rgba(13,13,17,.97);
-  border:1px solid rgba(255,255,255,.08);
-  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
-  box-shadow:0 16px 50px rgba(0,0,0,.7);
-  animation:msgIn .2s ease;
-}
-
-/* ── Period button highlight ── */
-.period-btn{
-  border-color:rgba(14,165,233,.35);background:rgba(14,165,233,.07);
-  box-shadow:0 0 12px rgba(14,165,233,.08);
-}
-.period-btn:hover{box-shadow:0 0 20px rgba(14,165,233,.15)}
-
-@media(max-width:700px){.sidebar{display:none}.example-qs{grid-template-columns:1fr}}
-
 </style>
 </head>
 <body>
@@ -667,7 +402,7 @@ body::after{background:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmln
 <!-- ═══ HEADER ═══════════════════════════════════════════════════ -->
 <div class="header">
   <div class="header-logo">
-    <div class="logo-mark"></div>
+    <div class="logo-mark">🧠</div>
     <div>
       <div class="logo-text">FB AI Brain</div>
       <div class="logo-sub">Powered by Claude</div>
@@ -732,7 +467,7 @@ body::after{background:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmln
   <div class="chat" id="chat">
     <!-- Welcome screen shown before any messages -->
     <div class="welcome" id="welcome">
-      <div class="welcome-icon"></div>
+      <div class="welcome-icon">🧠</div>
       <h1>Your Facebook Ads AI</h1>
       <p>Ask anything about your campaigns in plain English. I'll fetch the data, analyse it with full awareness of attribution models, campaign status, and date ranges — then give you clear insights.</p>
       <div class="example-qs">
@@ -1003,14 +738,14 @@ async function send() {
 function addUserMsg(text) {
   var el = document.createElement('div');
   el.className = 'msg user';
-  el.innerHTML = '<div class="bubble">' + escHtml(text) + '</div>';
+  el.innerHTML = '<div class="bubble">' + escHtml(text) + '</div><div class="msg-avatar user-av">👤</div>';
   $chat.appendChild(el); scroll();
 }
 
 function addAiMsg(md, dataHtml) {
   var el = document.createElement('div');
   el.className = 'msg ai';
-  var content = '<div class="msg-avatar ai-av"></div><div class="bubble">' + mdToHtml(md);
+  var content = '<div class="msg-avatar ai-av">🧠</div><div class="bubble">' + mdToHtml(md);
   if (dataHtml) content += dataHtml;
   content += '</div>';
   el.innerHTML = content;
@@ -1021,10 +756,8 @@ function addAiMsg(md, dataHtml) {
 function addThinking(steps) {
   var el = document.createElement('div');
   el.className = 'msg ai';
-  var stepsHtml = steps && steps.length
-    ? '<div class="think-steps" id="think-steps">' + steps.map(function(s,i){return '<div class="think-step" id="ts'+i+'">'+s+'</div>';}).join('') + '</div>'
-    : '';
-  el.innerHTML = '<div class="msg-avatar ai-av"></div><div class="think-bubble"><div class="think-dots"><span></span><span></span><span></span></div><span class="think-lbl">Thinking…</span>' + stepsHtml + '</div>';
+  el.innerHTML = '<div class="msg-avatar ai-av">🧠</div><div class="think-bubble"><div class="think-dots"><span></span><span></span><span></span></div><div class="think-steps" id="think-steps">' +
+    steps.map(function(s,i){return '<div class="think-step" id="ts'+i+'">'+s+'</div>';}).join('') + '</div></div>';
   $chat.appendChild(el); scroll();
   return el;
 }
