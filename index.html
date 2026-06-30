@@ -2501,8 +2501,8 @@ var GlobeFX = (function () {
     if (sensorsTried) return; sensorsTried = true;
     function orient(e) {
       if (e.gamma == null && e.beta == null) return;
-      tiltY = clamp((e.gamma || 0) / 90 * 0.7, -0.7, 0.7);
-      tiltX = clamp(((e.beta || 0) - 40) / 90 * 0.6, -0.6, 0.6);
+      tiltY = clamp((e.gamma || 0) / 90 * 0.95, -0.95, 0.95);
+      tiltX = clamp(((e.beta || 0) - 40) / 90 * 0.8, -0.8, 0.8);
     }
     function motion(e) {
       var a = e.accelerationIncludingGravity || e.acceleration; if (!a) return;
@@ -2555,8 +2555,8 @@ var GlobeFX = (function () {
     raf = requestAnimationFrame(loop);
     if (!cvs || !document.body.contains(cvs)) { raf = null; return; }
     t += 1;
-    tiltXc += (tiltX - tiltXc) * 0.06; tiltYc += (tiltY - tiltYc) * 0.06;
-    for (var ri = ripples.length - 1; ri >= 0; ri--) { var rp = ripples[ri]; rp.r += 3.2; rp.life -= 0.02; if (rp.life <= 0 || rp.r > sz * 0.95) ripples.splice(ri, 1); }
+    tiltXc += (tiltX - tiltXc) * 0.09; tiltYc += (tiltY - tiltYc) * 0.09;
+    for (var ri = ripples.length - 1; ri >= 0; ri--) { var rp = ripples[ri]; rp.r += 3.6; rp.life -= 0.012; if (rp.life <= 0 || rp.r > sz * 1.1) ripples.splice(ri, 1); }
     var s = STATE[state] || STATE.idle;
     if (party > 0) party--;
     if (!dragging) {
@@ -2599,9 +2599,9 @@ var GlobeFX = (function () {
         for (var rk = 0; rk < ripples.length; rk++) {
           var rpp = ripples[rk], ddx = q.sx - rpp.x, ddy = q.sy - rpp.y;
           var dd = Math.sqrt(ddx * ddx + ddy * ddy), df = dd - rpp.r;
-          wb += Math.exp(-(df * df) / 240) * rpp.life;
+          wb += Math.exp(-(df * df) / 360) * rpp.life;
         }
-        size += wb * 2.8; a = Math.min(1, a + wb * 0.55);
+        size += wb * 3.6; a = Math.min(1, a + wb * 0.7);
       }
       // cyan(0,229,255) -> purple(139,92,246) -> pink(244,114,182) by latitude
       var r = Math.round(0 + q.ty * 244 + hueShift);
@@ -2628,8 +2628,8 @@ var GlobeFX = (function () {
       for (var rg = 0; rg < ripples.length; rg++) {
         var rr = ripples[rg];
         ctx.beginPath(); ctx.arc(rr.x, rr.y, rr.r, 0, 6.2832);
-        ctx.strokeStyle = 'rgba(120,235,255,' + (0.55 * rr.life).toFixed(3) + ')';
-        ctx.lineWidth = 1.6; ctx.stroke();
+        ctx.strokeStyle = 'rgba(120,235,255,' + (0.6 * rr.life).toFixed(3) + ')';
+        ctx.lineWidth = 2.0; ctx.stroke();
       }
       ctx.restore();
     }
