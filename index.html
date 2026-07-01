@@ -1647,7 +1647,25 @@ async function ask(userMsg){
               }catch(_){rowInfo=`${(r.data.length/1024).toFixed(1)}kb`}
               card.ok(rowInfo);
             }
+          } else if(t.name==='query_linkedin_ads'){
+            const inp=t.input;
+            const detail=`${inp.action||'report'} · ${(inp.dimensions||inp.metrics||inp.fields||[]).slice(0,3).join(', ')}`;
+            status.phase('searching','LinkedIn Ads');
+            const card=appendToolCard('linkedin',inp.description||'LinkedIn query',detail);
+            r=await linkedinQuery(inp);
+            if(r.error){card.err('Failed')}
+            else{
+              let rowInfo='data received';
+              try{
+                const parsed=JSON.parse(r.data);
+                const rows=parsed.total||parsed.elements?.length||parsed.data?.length;
+                if(rows!==undefined)rowInfo=`${rows} rows`;
+                else rowInfo=`${(r.data.length/1024).toFixed(1)}kb`;
+              }catch(_){rowInfo=`${(r.data.length/1024).toFixed(1)}kb`}
+              card.ok(rowInfo);
+            }
           }
+          if(!r)r={error:`Tool "${t.name}" is not supported`};
           if(r.error)results.push({type:'tool_result',tool_use_id:t.id,content:JSON.stringify({error:r.error}),is_error:true});
           else results.push({type:'tool_result',tool_use_id:t.id,content:r.data});
         }
