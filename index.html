@@ -792,6 +792,17 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
   .acct-pill-name{max-width:46px}
   .ch-title{max-width:30vw}
 }
+/* ── message overflow containment (fixes content running off-screen) ── */
+.msgs{overflow-x:hidden}
+.mwrap{overflow-x:hidden;max-width:100%}
+.msg{min-width:0}
+.mbody{min-width:0}
+.msg .mbubble{max-width:100%;overflow-wrap:break-word;word-break:break-word}
+.msg.ai .mbubble p,.msg.ai .mbubble li,.msg.ai .mbubble h1,.msg.ai .mbubble h2,.msg.ai .mbubble h3{overflow-wrap:break-word}
+.msg.ai .mbubble table{display:block;width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.msg.ai .mbubble pre{max-width:100%;overflow-x:auto}
+.tool-card{max-width:100%}
+.tool-desc,.tool-query,.tool-lbl{overflow:hidden;text-overflow:ellipsis}
 
 </style>
 </head>
