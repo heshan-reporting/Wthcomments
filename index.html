@@ -828,6 +828,14 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
   .login-divider,.lx-field,.lx-row,.lx-signin{display:none}
   .login-setup-btn{margin-top:10px}
   .login-footer{margin-top:12px}
+  /* account switcher reachable + bottom-sheet dropdown */
+  .ch-title{max-width:30vw!important}
+  .user-avatar-wrap{display:none}
+  .acct-pill{max-width:48vw}
+  .hdr-switcher{position:static}
+  .hdr-acct-dropdown{position:fixed!important;left:0;right:0;bottom:0;top:auto!important;width:100%;min-width:0;max-width:none;max-height:74vh;border-radius:18px 18px 0 0;z-index:400;box-shadow:0 -12px 40px rgba(0,0,0,.6)}
+  #hdr-acct-list{max-height:calc(74vh - 54px)}
+  .sb-overlay.on{z-index:390}
 }
 
 </style>
