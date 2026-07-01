@@ -199,23 +199,67 @@ async function googleAccessToken(env) {
   return { token: d.access_token };
 }
 
-/* ── TIKTOK (optional) ────────────────────────────────────────────── */
+/* ── TIKTOK Ads ───────────────────────────────────────────────────── */
 async function tiktokAds(body, env) {
   const token = env.TIKTOK_ACCESS_TOKEN;
   const adv = body.advertiserId || env.TIKTOK_ADVERTISER_ID;
-  if (!token || !adv) return json({ error: 'TikTok not configured (set TIKTOK_ACCESS_TOKEN + TIKTOK_ADVERTISER_ID)' });
+  if (!token) return json({ error: 'TikTok not configured (set TIKTOK_ACCESS_TOKEN)' });
+  if (!adv) return json({ error: 'No TikTok advertiser ID (set it in the app Config, or TIKTOK_ADVERTISER_ID secret)' });
 
   const base = 'https://business-api.tiktok.com/open_api/v1.3';
-  const path = body.path || '/report/integrated/get/';
-  const skip = ['source', 'path', 'advertiserId', 'description'];
-  const q = new URLSearchParams({ advertiser_id: adv });
-  for (const k in body) {
-    if (skip.includes(k)) continue;
-    const v = body[k];
-    q.set(k, typeof v === 'object' ? JSON.stringify(v) : v);
+  const action = body.action || 'report';
+
+  const dataLevel = (dims) => {
+    const d = (dims || []).join(',');
+    if (d.includes('ad_id')) return 'AUCTION_AD';
+    if (d.includes('adgroup_id')) return 'AUCTION_ADGROUP';
+    if (d.includes('campaign_id')) return 'AUCTION_CAMPAIGN';
+    return 'AUCTION_ADVERTISER';
+  };
+  const qs = (obj) => {
+    const q = new URLSearchParams();
+    for (const k in obj) {
+      const v = obj[k];
+      if (v === undefined || v === null || v === '') continue;
+      q.set(k, typeof v === 'object' ? JSON.stringify(v) : v);
+    }
+    return q.toString();
+  };
+
+  let url;
+  if (action === 'report') {
+    const dims = body.dimensions || ['campaign_id'];
+    const params = {
+      advertiser_id: adv,
+      report_type: body.reportType || 'BASIC',
+      data_level: dataLevel(dims),
+      dimensions: dims,
+      metrics: body.metrics || ['spend', 'impressions', 'clicks', 'ctr', 'cpc'],
+      start_date: body.startDate,
+      end_date: body.endDate,
+      page_size: body.pageSize || 1000,
+    };
+    if (body.orderField) params.order_field = body.orderField;
+    if (body.orderType) params.order_type = body.orderType;
+    if (body.filters) params.filtering = body.filters;
+    else if (body.campaignIds) params.filtering = [{ field_name: 'campaign_ids', filter_type: 'IN', filter_value: JSON.stringify(body.campaignIds) }];
+    url = base + '/report/integrated/get/?' + qs(params);
+  } else {
+    const ep = action === 'campaigns' ? '/campaign/get/' : action === 'adgroups' ? '/adgroup/get/' : '/ad/get/';
+    const params = { advertiser_id: adv, page_size: body.pageSize || 100 };
+    if (body.fields) params.fields = body.fields;
+    const flt = [];
+    if (body.campaignIds) flt.push({ field_name: 'campaign_ids', filter_type: 'IN', filter_value: JSON.stringify(body.campaignIds) });
+    if (body.adgroupIds) flt.push({ field_name: 'adgroup_ids', filter_type: 'IN', filter_value: JSON.stringify(body.adgroupIds) });
+    if (body.filters) params.filtering = body.filters;
+    else if (flt.length) params.filtering = flt;
+    url = base + ep + '?' + qs(params);
   }
-  const data = await (await fetch(base + path + '?' + q.toString(), { headers: { 'Access-Token': token } })).json();
-  return json(data);
+
+  const resp = await (await fetch(url, { headers: { 'Access-Token': token } })).json();
+  if (resp.code !== 0) return json({ error: 'TikTok ' + resp.code + ': ' + (resp.message || 'error') });
+  const list = (resp.data && resp.data.list) ? resp.data.list : (Array.isArray(resp.data) ? resp.data : []);
+  return json({ data: list, total: list.length, page_info: resp.data && resp.data.page_info });
 }
 
 /* ── LINKEDIN (optional stub) ─────────────────────────────────────── */
