@@ -1537,9 +1537,44 @@ Ad insights:            ad_name,impressions,clicks,spend,ctr,cpc,actions
 
 let busy=false;
 
+// Ensure every assistant tool_use has a matching tool_result immediately after —
+// heals histories left broken by an interrupted turn (Anthropic rejects otherwise).
+function repairHist(msgs){
+  const out=[];
+  for(let i=0;i<msgs.length;i++){
+    const m=msgs[i];
+    if(m && m.role==='assistant' && Array.isArray(m.content)){
+      const ids=m.content.filter(b=>b&&b.type==='tool_use').map(b=>b.id);
+      out.push(m);
+      if(ids.length){
+        const next=msgs[i+1];
+        const nextHasResults=next&&next.role==='user'&&Array.isArray(next.content)&&next.content.some(b=>b&&b.type==='tool_result');
+        if(nextHasResults){
+          const have=new Set(next.content.filter(b=>b&&b.type==='tool_result').map(b=>b.tool_use_id));
+          const miss=ids.filter(id=>!have.has(id)).map(id=>({type:'tool_result',tool_use_id:id,content:JSON.stringify({error:'interrupted'}),is_error:true}));
+          if(miss.length)next.content=[...miss,...next.content];
+          out.push(next);i++;
+        }else{
+          const fillers=ids.map(id=>({type:'tool_result',tool_use_id:id,content:JSON.stringify({error:'interrupted'}),is_error:true}));
+          if(next&&next.role==='user'){
+            const extra=Array.isArray(next.content)?next.content:[{type:'text',text:String(next.content)}];
+            out.push({role:'user',content:[...fillers,...extra]});i++;
+          }else{
+            out.push({role:'user',content:fillers});
+          }
+        }
+      }
+    }else{
+      out.push(m);
+    }
+  }
+  return out;
+}
+
 async function ask(userMsg){
   if(!cfg.key){appendMsg('ai','⚠️ No AI API key configured. Open **Configuration** to add your key.');return}
   hist.push({role:'user',content:userMsg});
+  hist=repairHist(hist);
   const status=appendStatus();setBusy(true);if(typeof setGlobeMode==='function')setGlobeMode('dock');
 
   if(!aid){
@@ -1594,6 +1629,7 @@ async function ask(userMsg){
         status.phase('searching');
         for(const t of uses){
           let r;
+          try{
           if(t.name==='query_google_ads'){
             const{gaql,description}=t.input;
             status.phase('searching','Google Ads');
@@ -1665,6 +1701,7 @@ async function ask(userMsg){
               card.ok(rowInfo);
             }
           }
+          }catch(err){ r={error:'Tool execution error: '+(err&&err.message||err)}; }
           if(!r)r={error:`Tool "${t.name}" is not supported`};
           if(r.error)results.push({type:'tool_result',tool_use_id:t.id,content:JSON.stringify({error:r.error}),is_error:true});
           else results.push({type:'tool_result',tool_use_id:t.id,content:r.data});
