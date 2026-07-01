@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0a0520">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="manifest" href="manifest.json">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>CMM Ads Intelligence — Curious Minds Media</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -632,7 +632,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 .hdr-dd-load-btn:hover{background:var(--fb-bg)}.hdr-dd-load-btn svg{width:13px;height:13px}
 .modal::-webkit-scrollbar,.mbody::-webkit-scrollbar{width:4px}
 .modal::-webkit-scrollbar-thumb,.mbody::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:2px}
-@media(max-width:700px){.sidebar{display:none}.mwrap{padding:0 14px}.inp-area{padding:12px 14px}}
+@media(max-width:700px){.mwrap{padding:0 14px}}
 @media(max-width:700px){
   .globe-canvas{width:150px;height:150px;margin-left:-75px;top:8px}
   .welcome{padding:172px 20px 110px}
@@ -716,6 +716,83 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 .ai-status.phase-compiling  .glyph::before{animation-duration:1.7s}
 .ai-status.phase-responding{--accent:#a855f7}
 .ai-status.phase-responding .glyph::before{animation-duration:2.4s}
+
+/* ═══ MOBILE OPTIMIZATION ═══════════════════════════════════════════════════ */
+.mob-menu{display:none;width:36px;height:36px;border-radius:9px;border:1px solid var(--border);background:var(--glass);color:var(--text);align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;padding:0}
+.mob-menu svg{width:18px;height:18px}
+.sb-overlay{display:none}
+@media(max-width:700px){
+  .mob-menu{display:flex}
+  /* sidebar as slide-in drawer (override display:none) */
+  .sidebar{display:flex!important;position:fixed;top:0;left:0;bottom:0;width:min(84vw,300px);
+    transform:translateX(-100%);transition:transform .28s cubic-bezier(.4,0,.2,1);
+    z-index:130;box-shadow:8px 0 44px rgba(0,0,0,.6);
+    padding-top:env(safe-area-inset-top)}
+  .sidebar.open{transform:none}
+  .sb-overlay{display:block;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(2px);
+    z-index:120;opacity:0;visibility:hidden;transition:opacity .25s}
+  .sb-overlay.on{opacity:1;visibility:visible}
+
+  /* header */
+  .ch-hdr{padding:0 10px;gap:8px;min-height:calc(52px + env(safe-area-inset-top));height:auto;padding-top:env(safe-area-inset-top)}
+  .ch-title{font-size:13px;max-width:38vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ch-sub{display:none}
+  .ch-hdr>div:last-child{gap:6px!important}
+  .acct-pill{max-width:130px;padding:5px 8px}
+  .acct-pill-name{max-width:66px}
+  .hdr-btns{gap:6px}
+  .hdr-btns .hbtn{font-size:0;padding:8px;border-radius:10px}
+  .hdr-btns .hbtn svg{width:16px;height:16px}
+  .user-avatar-wrap{width:30px;height:30px}
+
+  /* messages */
+  .msgs{padding:16px 0 120px}
+  .mwrap{padding:0 12px}
+  .msg{gap:9px;margin-bottom:16px}
+  .mbody{max-width:100%}
+  .msg.user .mbody{max-width:90%}
+  .mbubble{font-size:14px;padding:11px 14px;line-height:1.6}
+  .msg.ai .mbubble table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap}
+  .msg.ai .mbubble pre{font-size:11.5px}
+  .tool-card{padding:10px 12px}
+  .tool-desc,.tool-query{font-size:11px}
+  .ai-status .scol{min-width:0}
+
+  /* welcome + chips */
+  .welcome-headline{font-size:22px}
+  .welcome-sub{font-size:12px;margin-bottom:18px}
+  .chip{font-size:12px;padding:7px 13px}
+  .cg-label{font-size:9px}
+
+  /* input */
+  .inp-area{padding:8px 10px calc(8px + env(safe-area-inset-bottom))}
+  .inp-pill{padding:8px 8px 8px 8px;gap:7px}
+  #msg-inp{font-size:16px}   /* >=16px stops iOS zoom-on-focus */
+  .inp-plus-btn,.inp-mic-btn{width:30px;height:30px}
+  .inp-orb-wrap{width:28px;height:28px}
+  .send-btn{width:34px;height:34px}
+  .inp-foot{font-size:9.5px}
+
+  /* modals as bottom-anchored sheets */
+  .ov{align-items:flex-end}
+  .modal,.modal.wide{width:100vw;max-width:100vw;max-height:92vh;border-radius:18px 18px 0 0}
+  .mhd{padding:16px 18px 12px}.mbody{padding:16px 18px}.mfoot{padding:12px 18px calc(12px + env(safe-area-inset-bottom))}
+  .fld input,.fld textarea{font-size:16px}
+  .tabs-s{overflow-x:auto;white-space:nowrap}
+
+  /* header account dropdown full-width sheet */
+  .hdr-acct-dropdown{position:fixed;left:8px;right:8px;top:auto;min-width:0;max-width:none;max-height:70vh}
+  #hdr-acct-list{max-height:calc(70vh - 48px)}
+
+  /* login card fits small screens */
+  .login-card{width:94vw;padding:26px 20px 20px}
+  .login-headline{font-size:22px}
+}
+@media(max-width:400px){
+  .acct-pill-name{max-width:46px}
+  .ch-title{max-width:30vw}
+}
+
 </style>
 </head>
 <body>
@@ -753,6 +830,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 
 <div id="main-app">
 <div class="app">
+<div class="sb-overlay" id="sbOverlay" onclick="closeSidebar()"></div>
 
 <!-- SIDEBAR -->
 <aside class="sidebar">
@@ -800,6 +878,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 <!-- MAIN -->
 <main class="main">
   <div class="ch-hdr">
+    <button class="mob-menu" aria-label="Open menu" onclick="openSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
     <div>
       <div class="ch-title" id="ch-title">New conversation</div>
       <div class="ch-sub">Google Ads + Meta Ads &middot; CMM Ads Intelligence</div>
@@ -1105,12 +1184,16 @@ function renderSb(){
     l.appendChild(el);
   });
 }
+function openSidebar(){var s=document.querySelector('.sidebar'),o=document.getElementById('sbOverlay');if(s)s.classList.add('open');if(o)o.classList.add('on');}
+function closeSidebar(){var s=document.querySelector('.sidebar'),o=document.getElementById('sbOverlay');if(s)s.classList.remove('open');if(o)o.classList.remove('on');}
+addEventListener('resize',function(){if(innerWidth>700)closeSidebar();});
 function newChat(){
   aid=null;hist=[];
   document.getElementById('mwrap').innerHTML=welcomeHTML();
   document.getElementById('ch-title').textContent='New conversation';
   renderSb();
   if(typeof setGlobeMode==='function')setGlobeMode('hero');
+  closeSidebar();
 }
 function loadCv(id){
   const c=convos.find(x=>x.id===id);if(!c)return;
@@ -1123,6 +1206,7 @@ function loadCv(id){
   });
   renderSb();scrollBot();
   if(typeof setGlobeMode==='function')setGlobeMode('dock');
+  closeSidebar();
 }
 function delCv(e,id){e.stopPropagation();convos=convos.filter(c=>c.id!==id);storeConvos();if(aid===id)newChat();renderSb()}
 function clearChat(){if(aid){convos=convos.filter(c=>c.id!==aid);storeConvos()}newChat()}
@@ -1813,7 +1897,7 @@ function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrol
 function sendMsg(){const inp=document.getElementById('msg-inp');const msg=inp.value.trim();if(!msg||busy)return;inp.value='';inp.style.height='auto';appendMsg('user',msg);ask(msg)}
 function sendChip(el){appendMsg('user',el.textContent);ask(el.textContent)}
 
-function openSettings(){
+function openSettings(){closeSidebar();
   loadCfg();
   document.getElementById('c-key').value=cfg.key||'';
   document.getElementById('c-wurl').value=cfg.wurl||'';
@@ -1849,7 +1933,7 @@ function saveSettings(){
   var _ttt2=document.getElementById('c-tttoken');if(_ttt2)cfg.tttoken=_ttt2.value.trim();
   var _tta2=document.getElementById('c-ttadv');if(_tta2)cfg.ttadv=_tta2.value.trim();
 }
-function openSetup(){openMod('m-setup')}
+function openSetup(){closeSidebar();openMod('m-setup')}
 function openMod(id){document.getElementById(id).classList.add('open')}
 function closeMod(id){document.getElementById(id).classList.remove('open')}
 ['m-cfg','m-setup'].forEach(id=>{
@@ -2905,13 +2989,14 @@ var Globe3D=(function(){
     reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion:reduce)').matches;
     W=innerWidth;H=innerHeight;
     renderer=new THREE.WebGLRenderer({canvas:cvs,antialias:true,alpha:true});
-    renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));renderer.setSize(W,H);
+    renderer.setPixelRatio(Math.min(devicePixelRatio||1,(innerWidth<=700?1.5:2)));renderer.setSize(W,H);
     if(THREE.sRGBEncoding)renderer.outputEncoding=THREE.sRGBEncoding;
     scene=new THREE.Scene();
     cam=new THREE.PerspectiveCamera(42,W/H,0.1,200);cam.position.set(0,0,5.0);
     group=new THREE.Group();scene.add(group);
     mat=new THREE.ShaderMaterial({uniforms:{uTime:{value:0},uHover:{value:0}},vertexShader:VERT,fragmentShader:FRAG});
-    mesh=new THREE.Mesh(new THREE.IcosahedronGeometry(1.55,5),mat);group.add(mesh);
+    var _mob=innerWidth<=700;
+    mesh=new THREE.Mesh(new THREE.IcosahedronGeometry(1.55,_mob?4:5),mat);group.add(mesh);
     atmo=new THREE.Mesh(new THREE.SphereGeometry(1.55*1.18,48,48),new THREE.ShaderMaterial({transparent:true,blending:THREE.AdditiveBlending,side:THREE.BackSide,
       uniforms:{c:{value:new THREE.Color(0x4aa0ff)}},
       vertexShader:'varying float i;void main(){vec3 n=normalize(normalMatrix*normal);vec3 e=normalize((modelViewMatrix*vec4(position,1.0)).xyz);i=pow(0.66-dot(n,-e),3.2);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
@@ -2920,7 +3005,7 @@ var Globe3D=(function(){
     starsF=stars(1200,60,0.06,0.55);scene.add(starsF);
     starsN=stars(500,26,0.11,0.85);scene.add(starsN);
     [[ -13,5,-26,0x3a2ea6,10],[15,-7,-30,0x1c4fa6,11],[2,11,-34,0x6a2e7a,12]].forEach(function(p){var col=p[3];var s=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex((col>>16)&255,(col>>8)&255,col&255),transparent:true,opacity:0.18,blending:THREE.AdditiveBlending,depthWrite:false}));s.position.set(p[0],p[1],p[2]);s.scale.setScalar(p[4]);scene.add(s);neb.push(s);});
-    try{if(THREE.EffectComposer&&THREE.UnrealBloomPass){composer=new THREE.EffectComposer(renderer);composer.addPass(new THREE.RenderPass(scene,cam));composer.addPass(new THREE.UnrealBloomPass(new THREE.Vector2(W,H),0.9,0.55,0.7));composer.setSize(W,H);}}catch(e){composer=null;}
+    try{if(!_mob&&THREE.EffectComposer&&THREE.UnrealBloomPass){composer=new THREE.EffectComposer(renderer);composer.addPass(new THREE.RenderPass(scene,cam));composer.addPass(new THREE.UnrealBloomPass(new THREE.Vector2(W,H),0.9,0.55,0.7));composer.setSize(W,H);}}catch(e){composer=null;}
     // drag to rotate
     cvs.style.pointerEvents='auto';cvs.style.cursor='grab';
     function down(e){dragging=true;cvs.style.cursor='grabbing';var p=pt(e);lx=p.x;ly=p.y;}
