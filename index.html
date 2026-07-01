@@ -1011,6 +1011,7 @@ const CK=['key','wurl','wsec','gcid','gmgr','fbid','tttoken','ttadv','litoken','
 let cfg={};
 function uKey(k){var uid=currentUser?currentUser.id:'guest';return 'cmm_'+uid+'_'+k;}
 const DEFAULT_WURL='https://ads-proxy.heshan-998.workers.dev/';
+const DEFAULT_GCLIENT_ID='';  // paste your Google OAuth Web Client ID here to enable SSO for everyone
 function loadCfg(){CK.forEach(k=>{cfg[k]=localStorage.getItem(uKey(k))||''});if(!cfg.wurl)cfg.wurl=DEFAULT_WURL;refreshDots()}
 function storeCfg(){CK.forEach(k=>{localStorage.setItem(uKey(k),cfg[k])});refreshDots()}
 function refreshDots(){
@@ -2085,6 +2086,24 @@ async function reloadAccountsFromHeader() {
   }
 }
 
+// Silently load all Meta ad accounts on login (no chat messages, no prompts).
+async function autoLoadMetaAccounts(){
+  if(!cfg.wurl) return;
+  try{
+    var res = await fetch(cfg.wurl,{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':cfg.wsec||''},body:JSON.stringify({source:'meta_accounts'})});
+    if(!res.ok) return;
+    var data = JSON.parse(await res.text());
+    if(data.error || !data.accounts) return;
+    metaAccounts = data.accounts;
+    buildAcctDropdown();
+    buildHdrDropdown();
+    var saved = cfg.fbid && metaAccounts.find(function(a){return a.id===cfg.fbid;});
+    if(saved) selectAccount(saved.id, saved.name);
+    else if(metaAccounts.length) selectAccount(metaAccounts[0].id, metaAccounts[0].name);
+    refreshHdrSwitcher();
+  }catch(e){}
+}
+
 // Close header dropdown on outside click
 document.addEventListener('click', function(e) {
   var switcher = document.getElementById('hdr-switcher');
@@ -2146,6 +2165,7 @@ function showApp(){
   if(ma) ma.style.display = 'flex';
   loadCfg(); loadConvos(); renderSb();
   updateSidebarUser();
+  autoLoadMetaAccounts();
   if(!cfg.key) setTimeout(function(){ openMod('m-setup'); }, 600);
 }
 
@@ -2163,7 +2183,7 @@ function renderUserAvatar(){
 }
 
 function tryRenderGIS(){
-  var clientId=localStorage.getItem('cmm_gclient_id')||'';
+  var clientId=localStorage.getItem('cmm_gclient_id')||DEFAULT_GCLIENT_ID;
   var btn=document.getElementById('google-signin-btn');
   var msg=document.getElementById('gis-msg');
   if(!btn)return;
