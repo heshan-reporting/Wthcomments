@@ -803,6 +803,18 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 .msg.ai .mbubble pre{max-width:100%;overflow-x:auto}
 .tool-card{max-width:100%}
 .tool-desc,.tool-query,.tool-lbl{overflow:hidden;text-overflow:ellipsis}
+@media(max-width:700px){
+  /* header title truncates cleanly, right controls stay put */
+  .ch-hdr{overflow:hidden}
+  .ch-hdr>div:nth-of-type(1){flex:1 1 auto;min-width:0}
+  .ch-hdr>div:nth-of-type(2){flex:0 0 auto}
+  .ch-title{max-width:100%}
+  /* tables: every column shares width, cells wrap — all data fits, no side-scroll needed */
+  .msg.ai .mbubble table{display:table!important;width:100%!important;table-layout:fixed;border-collapse:collapse;font-size:11px;overflow:visible!important;white-space:normal!important}
+  .msg.ai .mbubble th,.msg.ai .mbubble td{white-space:normal!important;word-break:break-word;overflow-wrap:anywhere;padding:6px 7px;vertical-align:top}
+  .msg.ai .mbubble th{font-size:9px;letter-spacing:.3px}
+  .msg.ai .mbubble td:first-child{font-size:11px}
+}
 
 </style>
 </head>
