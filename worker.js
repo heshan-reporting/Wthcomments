@@ -56,6 +56,7 @@ export default {
 
     const source = body.source;
     try {
+      if (source === 'claude')        return await claude(body, env);
       if (source === 'google_ads')    return await googleAds(body, env);
       if (source === 'meta_ads')      return await metaAds(body, env);
       if (source === 'meta_accounts') return await metaAccounts(env);
@@ -67,6 +68,29 @@ export default {
     }
   },
 };
+
+/* ── CLAUDE: proxy to Anthropic so the API key stays server-side ───── */
+async function claude(body, env) {
+  const key = env.ANTHROPIC_API_KEY || env.CLAUDE_KEY || env.CLAUDE_API_KEY || env.ANTHROPIC_KEY;
+  if (!key) return json({ error: 'ANTHROPIC_API_KEY secret is not set on the worker' });
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: body.model || 'claude-sonnet-4-6',
+      max_tokens: body.max_tokens || 8192,
+      system: body.system,
+      tools: body.tools,
+      messages: body.messages,
+    }),
+  });
+  const text = await r.text();
+  return new Response(text, { status: r.status, headers: { ...CORS, 'Content-Type': 'application/json' } });
+}
 
 /* ── META: list ad accounts on the token ──────────────────────────── */
 async function metaAccounts(env) {

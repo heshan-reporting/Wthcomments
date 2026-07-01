@@ -1152,7 +1152,7 @@ const DEFAULT_GCLIENT_ID='304839341465-b8n5srgpimsjhb6jpfg3u3mpg95ibk8i.apps.goo
 function loadCfg(){CK.forEach(k=>{cfg[k]=localStorage.getItem(uKey(k))||''});if(!cfg.wurl)cfg.wurl=DEFAULT_WURL;refreshDots()}
 function storeCfg(){CK.forEach(k=>{localStorage.setItem(uKey(k),cfg[k])});refreshDots()}
 function refreshDots(){
-  document.getElementById('dot-c').className='sdot'+(cfg.key?' ok':'');
+  document.getElementById('dot-c').className='sdot'+(cfg.wurl?' ok':'');
   document.getElementById('dot-g').className='sdot'+(cfg.wurl&&cfg.gcid?' ok':'');
   document.getElementById('dot-f').className='sdot fb'+(cfg.wurl&&cfg.fbid?' ok':'');
   var _dT=document.getElementById('dot-t');
@@ -1723,7 +1723,7 @@ function datePreamble(){
 }
 
 async function ask(userMsg){
-  if(!cfg.key){appendMsg('ai','⚠️ No AI API key configured. Open **Configuration** to add your key.');return}
+  if(!cfg.wurl){appendMsg('ai','⚠️ No Worker URL configured. Open **Configuration** to set it.');return}
   hist.push({role:'user',content:userMsg});
   hist=repairHist(hist);
   const status=appendStatus();setBusy(true);if(typeof setGlobeMode==='function')setGlobeMode('dock');
@@ -1741,15 +1741,14 @@ async function ask(userMsg){
     while(loop){
       iter++;
       status.phase(iter===1?'thinking':'analyzing');
-      const res=await fetch('https://api.anthropic.com/v1/messages',{
+      const res=await fetch(cfg.wurl,{
         method:'POST',
         headers:{
           'Content-Type':'application/json',
-          'x-api-key':cfg.key,
-          'anthropic-version':'2023-06-01',
-          'anthropic-dangerous-direct-browser-access':'true'
+          'X-Auth-Token':cfg.wsec||''
         },
         body:JSON.stringify({
+          source:'claude',
           model:'claude-sonnet-4-6',
           max_tokens:8192,
           system:datePreamble()+(cfg.sys||DEFAULT_SYS),
@@ -2304,7 +2303,7 @@ function showApp(){
   loadCfg(); loadConvos(); renderSb();
   updateSidebarUser();
   autoLoadMetaAccounts();
-  if(!cfg.key) setTimeout(function(){ openMod('m-setup'); }, 600);
+  if(!cfg.wurl) setTimeout(function(){ openMod('m-setup'); }, 600);
 }
 
 function showLogin(){
