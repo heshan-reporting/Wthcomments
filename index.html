@@ -1010,7 +1010,8 @@ console.log(tokens.refresh_token);</code></pre>
 const CK=['key','wurl','wsec','gcid','gmgr','fbid','tttoken','ttadv','litoken','liacct','lirefresh','sys'];
 let cfg={};
 function uKey(k){var uid=currentUser?currentUser.id:'guest';return 'cmm_'+uid+'_'+k;}
-function loadCfg(){CK.forEach(k=>{cfg[k]=localStorage.getItem(uKey(k))||''});refreshDots()}
+const DEFAULT_WURL='https://ads-proxy.heshan-998.workers.dev/';
+function loadCfg(){CK.forEach(k=>{cfg[k]=localStorage.getItem(uKey(k))||''});if(!cfg.wurl)cfg.wurl=DEFAULT_WURL;refreshDots()}
 function storeCfg(){CK.forEach(k=>{localStorage.setItem(uKey(k),cfg[k])});refreshDots()}
 function refreshDots(){
   document.getElementById('dot-c').className='sdot'+(cfg.key?' ok':'');
