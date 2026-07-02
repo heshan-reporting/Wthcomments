@@ -3208,13 +3208,13 @@ var Globe3D=(function(){
    via drawImage (no per-frame path rasterization); everything stops when the
    login screen closes. */
 var LoginCinema=(function(){
-  var video=null,cvs=null,ctx=null,raf=null,ps=[],W=0,H=0,sprite=null,bound=false;
+  var video=null,cvs=null,ctx=null,raf=null,ps=[],W=0,H=0,sprite=null,spriteCyan=null,bound=false;
   var reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion:reduce)').matches;
   var saveData=!!(navigator.connection&&navigator.connection.saveData);
-  function makeSprite(){
+  function makeSprite(r,g2,b){
     var c=document.createElement('canvas');c.width=c.height=32;
     var x=c.getContext('2d'),g=x.createRadialGradient(16,16,0,16,16,16);
-    g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(0.5,'rgba(255,255,255,0.35)');g.addColorStop(1,'rgba(255,255,255,0)');
+    g.addColorStop(0,'rgba('+r+','+g2+','+b+',1)');g.addColorStop(0.5,'rgba('+r+','+g2+','+b+',0.35)');g.addColorStop(1,'rgba('+r+','+g2+','+b+',0)');
     x.fillStyle=g;x.fillRect(0,0,32,32);return c;
   }
   function resize(){
@@ -3231,18 +3231,21 @@ var LoginCinema=(function(){
     for(var i=0;i<count;i++)ps.push({
       x:Math.random()*W,y:Math.random()*H,
       vx:(Math.random()-.5)*.25,vy:(Math.random()-.5)*.25,
-      s:Math.random()*2.4+1.2,o:Math.random()*.5+.15});
+      s:Math.random()*2.4+1.2,o:Math.random()*.5+.15,
+      tw:Math.random()*.02+.004,ph:Math.random()*Math.PI*2,
+      cyan:Math.random()<.22}); // a few brand-cyan sparks among the white
   }
   function tick(){
     raf=requestAnimationFrame(tick);
     ctx.clearRect(0,0,W,H);
     for(var i=0;i<ps.length;i++){
       var p=ps[i];
-      p.x+=p.vx;p.y+=p.vy;
+      p.x+=p.vx;p.y+=p.vy;p.ph+=p.tw;
       if(p.x<-4)p.x=W+4;else if(p.x>W+4)p.x=-4;
       if(p.y<-4)p.y=H+4;else if(p.y>H+4)p.y=-4;
-      ctx.globalAlpha=p.o;
-      ctx.drawImage(sprite,p.x-p.s,p.y-p.s,p.s*2,p.s*2);
+      var op=p.o+Math.sin(p.ph)*.16;
+      ctx.globalAlpha=op<.04?.04:op;
+      ctx.drawImage(p.cyan?spriteCyan:sprite,p.x-p.s,p.y-p.s,p.s*2,p.s*2);
     }
     ctx.globalAlpha=1;
   }
@@ -3259,7 +3262,7 @@ var LoginCinema=(function(){
       var pr=video.play();if(pr&&pr.catch)pr.catch(function(){});
     }
     if(cvs){
-      if(!ctx){ctx=cvs.getContext('2d');sprite=makeSprite();}
+      if(!ctx){ctx=cvs.getContext('2d');sprite=makeSprite(255,255,255);spriteCyan=makeSprite(120,232,255);}
       if(!bound)addEventListener('resize',resize);
       resize();
       if(!raf)tick();
