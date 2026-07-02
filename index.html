@@ -179,11 +179,11 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 
 /* ── LOGIN SCREEN (Veldara scroll experience) ─────────────────────────────── */
 #login-screen{display:none;position:fixed;inset:0;z-index:200;overflow-x:hidden;overflow-y:auto;
-  background:#010101;-webkit-overflow-scrolling:touch;
+  background:#010101;-webkit-overflow-scrolling:touch;touch-action:pan-y;
   font-family:'Inter',var(--fm),sans-serif;color:#fff}
 
 /* Scroll video — fixed backdrop scrubbed by scroll position */
-.lxv-video{position:fixed;inset:0;top:-20%;z-index:-10;background:#0a0a0a}
+.lxv-video{position:fixed;inset:0;top:-20%;z-index:-10;background:#0a0a0a;will-change:transform}
 .lxv-video canvas,.lxv-video video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:translateZ(0)}
 .lxv-overlay{position:absolute;inset:0;background:rgba(0,0,0,.2)}
 
@@ -641,6 +641,15 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 }
 .globe-canvas:active{cursor:grabbing}
 .globe-mode-dock .globe-canvas{cursor:pointer}
+.globe-mode-focus .globe-canvas{
+  filter:drop-shadow(0 0 40px rgba(0,229,255,.45)) drop-shadow(0 0 100px rgba(139,92,246,.38))}
+
+/* AI answers reveal block-by-block, in step with the globe's pulses */
+@keyframes blockIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.msg.ai .mbubble.reveal>*{opacity:0;animation:blockIn .5s cubic-bezier(.2,.7,.3,1) forwards}
+@media(prefers-reduced-motion:reduce){
+  .msg.ai .mbubble.reveal>*{animation:none;opacity:1;transform:none}
+}
 
 /* extra mini-orb state variants (searching / analyzing / compiling / responding) */
 #mini-orb.s-searching{animation-duration:1.0s}
@@ -1381,7 +1390,19 @@ function appendMsg(role,content,anim=true){
   const html=role==='ai'?marked.parse(content,{breaks:true,gfm:true}):`<p>${esc(content)}</p>`;
   const avHtml=role==='ai'?'<div class="ai-av mavatar"><div class="msg-orb"></div></div>':'';
   el.innerHTML=`${avHtml}<div class="mbody"><div class="mbubble">${html}</div><div class="mtime">${t}</div></div>`;
-  w.appendChild(el);scrollBot();return el;
+  w.appendChild(el);
+  // reveal AI answers block-by-block, each block beating a pulse through the globe
+  if(role==='ai'&&anim){
+    const bub=el.querySelector('.mbubble');
+    if(bub&&bub.children.length){
+      bub.classList.add('reveal');
+      const kids=bub.children,cap=14;
+      for(let i=0;i<kids.length;i++)kids[i].style.animationDelay=Math.min(i,cap)*90+'ms';
+      const beats=Math.min(kids.length,cap);
+      for(let i=0;i<beats;i++)setTimeout(()=>{if(window.GlobeFX)GlobeFX.pulse();},i*90);
+    }
+  }
+  scrollBot();return el;
 }
 
 function appendToolCard(platform, desc, detail, isAsync){
@@ -2852,6 +2873,17 @@ function updateOrbState(state) {
     mo.classList.add('s-' + state);
   }
   if (window.GlobeFX) GlobeFX.setState(state);
+  // stage choreography: working states pull the globe centre-stage,
+  // responding returns it to the dock, idle settles per screen
+  if (typeof setGlobeMode === 'function') {
+    if (state === 'thinking' || state === 'searching' || state === 'analyzing' || state === 'compiling') {
+      setGlobeMode('focus');
+    } else if (state === 'responding' || state === 'answering') {
+      setGlobeMode('dock');
+    } else if (state === 'idle') {
+      setGlobeMode(document.getElementById('welcome') ? 'hero' : 'dock');
+    }
+  }
 }
 
 // ── Typing state hook
@@ -2889,18 +2921,35 @@ var GlobeFX = (function () {
   var rotY = 0.6, rotX = -0.32, spinExtra = 0;
   var dragging = false, lx = 0, ly = 0, lastDX = 0;
   var state = 'idle', t = 0, winBound = false;
-  var kickSpin = 0, pop = 0, party = 0;
-  var ripples = [], tiltX = 0, tiltY = 0, tiltXc = 0, tiltYc = 0, sensorsTried = false;
+  var kickSpin = 0, pop = 0, party = 0, flowKick = 0;
+  var ripples = [], rings = [], orbiters = [], orbT = 0;
+  var tiltX = 0, tiltY = 0, tiltXc = 0, tiltYc = 0, sensorsTried = false;
+  // eased params so state changes glide instead of snapping
+  var cAmp = 0.05, cFlow = 0.05, cBright = 1.02, cSpin = 0.0019;
   var STATE = {
-    idle:       { spin: 0.0019, bright: 1.05, pulse: 0.35, hue: 0 },
-    typing:     { spin: 0.0044, bright: 1.10, pulse: 0.35, hue: 0 },
-    thinking:   { spin: 0.0030, bright: 1.14, pulse: 0.55, hue: 18 },
-    searching:  { spin: 0.0140, bright: 1.34, pulse: 0.75, hue: 0 },
-    analyzing:  { spin: 0.0070, bright: 1.24, pulse: 0.95, hue: 42 },
-    compiling:  { spin: 0.0050, bright: 1.18, pulse: 0.60, hue: -12 },
-    responding: { spin: 0.0036, bright: 1.14, pulse: 0.45, hue: -22 },
-    answering:  { spin: 0.0036, bright: 1.14, pulse: 0.45, hue: -22 }
+    idle:       { spin: 0.0019, bright: 1.02, amp: 0.050, flow: 0.050, orb: 0 },
+    typing:     { spin: 0.0044, bright: 1.10, amp: 0.085, flow: 0.145, orb: 0 },
+    thinking:   { spin: 0.0034, bright: 1.16, amp: 0.120, flow: 0.220, orb: 1 },
+    searching:  { spin: 0.0115, bright: 1.30, amp: 0.145, flow: 0.300, orb: 1 },
+    analyzing:  { spin: 0.0064, bright: 1.24, amp: 0.130, flow: 0.260, orb: 1 },
+    compiling:  { spin: 0.0050, bright: 1.18, amp: 0.105, flow: 0.200, orb: 0.6 },
+    responding: { spin: 0.0036, bright: 1.14, amp: 0.085, flow: 0.160, orb: 0 },
+    answering:  { spin: 0.0036, bright: 1.14, amp: 0.085, flow: 0.160, orb: 0 }
   };
+  // iridescent palette: cyan -> electric blue -> violet -> magenta -> emerald -> cyan
+  var PAL = [[0,229,255],[41,121,255],[139,92,246],[244,66,214],[16,224,160]];
+  function palAt(x) {
+    x = x - Math.floor(x);
+    var f = x * PAL.length, i = Math.floor(f), g = f - i;
+    var a = PAL[i % PAL.length], b = PAL[(i + 1) % PAL.length];
+    return [a[0] + (b[0] - a[0]) * g, a[1] + (b[1] - a[1]) * g, a[2] + (b[2] - a[2]) * g];
+  }
+  // layered flowing sine field — the organic "alive" surface motion
+  function wob(p, tf) {
+    return Math.sin(p.x * 2.3 + tf * 1.15 + Math.sin(p.y * 1.7 + tf * 0.8)) * 0.5
+         + Math.sin(p.y * 2.9 - tf * 0.95 + Math.sin(p.z * 2.1 + tf * 0.7)) * 0.3
+         + Math.sin(p.z * 3.3 + tf * 1.35) * 0.2;
+  }
 
   function build() {
     pts = [];
@@ -2908,6 +2957,10 @@ var GlobeFX = (function () {
     for (var i = 0; i < N; i++) {
       var y = i * off - 1 + off / 2, r = Math.sqrt(Math.max(0, 1 - y * y)), phi = i * inc;
       pts.push({ x: Math.cos(phi) * r, y: y, z: Math.sin(phi) * r });
+    }
+    orbiters = [];
+    for (var k = 0; k < 3; k++) {
+      orbiters.push({ sp: 0.9 + Math.random() * 0.7, inc: (Math.random() - 0.5) * 1.6, ph: Math.random() * 6.28, pal: Math.random() });
     }
   }
 
@@ -2925,6 +2978,7 @@ var GlobeFX = (function () {
     if (ripples.length < 6) ripples.push({ x: L.x, y: L.y, r: 0, life: 1 });
     pop = Math.min(0.26, pop + 0.18);
     kickSpin = Math.min(0.07, kickSpin + 0.022);
+    flowKick = Math.min(0.3, flowKick + 0.1);
   }
 
   // phone motion sensors: tilt to rotate, shake to ripple (asks permission on iOS)
@@ -2988,10 +3042,19 @@ var GlobeFX = (function () {
     t += 1;
     tiltXc += (tiltX - tiltXc) * 0.09; tiltYc += (tiltY - tiltYc) * 0.09;
     for (var ri = ripples.length - 1; ri >= 0; ri--) { var rp = ripples[ri]; rp.r += 3.6; rp.life -= 0.012; if (rp.life <= 0 || rp.r > sz * 1.1) ripples.splice(ri, 1); }
+    for (var gi = rings.length - 1; gi >= 0; gi--) { var rg = rings[gi]; rg.r += sz * 0.011; rg.life -= 0.016; if (rg.life <= 0) rings.splice(gi, 1); }
     var s = STATE[state] || STATE.idle;
+    // glide every parameter toward its state target — seamless transitions
+    cAmp += (s.amp - cAmp) * 0.05;
+    cFlow += (s.flow + flowKick - cFlow) * 0.06;
+    cBright += (s.bright - cBright) * 0.05;
+    cSpin += (s.spin - cSpin) * 0.05;
+    flowKick *= 0.94;
+    orbT += ((s.orb || 0) - orbT) * 0.045;
+    if (orbT > 0.05 && t % 46 === 0 && rings.length < 4) rings.push({ r: R * 0.72, life: 1 });
     if (party > 0) party--;
     if (!dragging) {
-      rotY += s.spin + spinExtra + kickSpin + (party > 0 ? 0.05 : 0);
+      rotY += cSpin + spinExtra + kickSpin + (party > 0 ? 0.05 : 0);
       spinExtra *= 0.96; kickSpin *= 0.90;
       if (state === 'idle' && party <= 0) {
         // autonomous "alive" behaviour: gently look up/down + the occasional thought-pulse
@@ -3000,31 +3063,34 @@ var GlobeFX = (function () {
       }
     }
     pop *= 0.86;
-    draw(s);
+    draw();
   }
 
-  function draw(s) {
+  function draw() {
     ctx.setTransform(dprG, 0, 0, dprG, 0, 0);
     ctx.clearRect(0, 0, sz, sz);
+    var tf = t * 0.016;
     var erx = rotX + tiltXc, ery = rotY + tiltYc;
     var cosY = Math.cos(ery), sinY = Math.sin(ery), cosX = Math.cos(erx), sinX = Math.sin(erx);
     var bob = party > 0 ? Math.sin(t * 0.55) * 7 : 0;
     var bounce = party > 0 ? (1 + 0.10 * Math.abs(Math.sin(t * 0.55))) : 1;
-    var pulse = (1 + s.pulse * 0.05 * Math.sin(t * 0.11) + pop) * bounce;
-    var hueShift = s.hue;
-    // back-to-front for nicer overlap
+    // breathing: two slow sines beat against each other so it never feels metronomic
+    var pulse = (1 + 0.030 * Math.sin(t * 0.045) + 0.018 * Math.sin(t * 0.083 + 1.7) + pop) * bounce;
     var proj = [];
     for (var i = 0; i < pts.length; i++) {
       var p = pts[i];
+      var w = wob(p, tf);
+      var rad = R * pulse * (1 + cAmp * w);
       var x1 = p.x * cosY - p.z * sinY, z1 = p.x * sinY + p.z * cosY;
       var y1 = p.y * cosX - z1 * sinX, z2 = p.y * sinX + z1 * cosX;
-      proj.push({ sx: cx + x1 * R * pulse, sy: cy + bob + y1 * R * pulse, d: (z2 + 1) / 2, ty: (p.y + 1) / 2 });
+      proj.push({ sx: cx + x1 * rad, sy: cy + bob + y1 * rad, d: (z2 + 1) / 2, w: w,
+                  ph: (p.x * 0.9 + p.y * 1.3 - p.z * 0.7) * 0.22 + w * 0.12 + tf * cFlow });
     }
     proj.sort(function (a, b) { return a.d - b.d; });
     for (var j = 0; j < proj.length; j++) {
       var q = proj[j];
-      var size = 0.5 + q.d * 2.1;
-      var a = (0.12 + q.d * 0.88) * (0.55 + 0.45 * s.bright);
+      var size = 0.55 + q.d * 2.15 + Math.max(0, q.w) * cAmp * 6;
+      var a = (0.12 + q.d * 0.88) * (0.50 + 0.45 * cBright) * (0.82 + 0.22 * q.w);
       if (ripples.length) {
         var wb = 0;
         for (var rk = 0; rk < ripples.length; rk++) {
@@ -3034,30 +3100,60 @@ var GlobeFX = (function () {
         }
         size += wb * 3.6; a = Math.min(1, a + wb * 0.7);
       }
-      // cyan(0,229,255) -> purple(139,92,246) -> pink(244,114,182) by latitude
-      var r = Math.round(0 + q.ty * 244 + hueShift);
-      var g = Math.round(229 - q.ty * 130 - (hueShift > 0 ? hueShift : 0));
-      var b = Math.round(255 - q.ty * 78);
-      r = Math.max(0, Math.min(255, r)); g = Math.max(0, Math.min(255, g)); b = Math.max(0, Math.min(255, b));
+      var col = palAt(q.ph);
+      var lum = 0.62 + 0.38 * q.d;
       ctx.beginPath();
       ctx.arc(q.sx, q.sy, size, 0, 6.2832);
       if (party > 0) {
-        ctx.fillStyle = 'hsla(' + ((q.ty * 140 + t * 7) % 360) + ',92%,62%,' + a.toFixed(3) + ')';
+        ctx.fillStyle = 'hsla(' + ((q.d * 140 + t * 7) % 360) + ',92%,62%,' + clamp(a, 0, 1).toFixed(3) + ')';
       } else {
-        ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',' + a.toFixed(3) + ')';
+        ctx.fillStyle = 'rgba(' + Math.round(col[0] * lum) + ',' + Math.round(col[1] * lum) + ',' + Math.round(col[2] * lum) + ',' + clamp(a, 0, 1).toFixed(3) + ')';
       }
       ctx.fill();
     }
+    // core aura tinted by the travelling palette
+    var ac = palAt(tf * cFlow);
     var gg = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.15);
-    gg.addColorStop(0, 'rgba(150,140,255,' + (0.12 * s.bright).toFixed(3) + ')');
+    gg.addColorStop(0, 'rgba(' + Math.round(ac[0]) + ',' + Math.round(ac[1]) + ',' + Math.round(ac[2]) + ',' + (0.10 * cBright).toFixed(3) + ')');
     gg.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = gg;
     ctx.beginPath(); ctx.arc(cx, cy, R * 1.15, 0, 6.2832); ctx.fill();
+    // expanding energy rings (thinking) + response pulses — additive light
+    if (rings.length || orbT > 0.05) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (var g2 = 0; g2 < rings.length; g2++) {
+        var rr2 = rings[g2], rc = palAt(rr2.life * 0.6 + tf * 0.2);
+        ctx.beginPath(); ctx.arc(cx, cy + bob, rr2.r * pulse, 0, 6.2832);
+        ctx.strokeStyle = 'rgba(' + Math.round(rc[0]) + ',' + Math.round(rc[1]) + ',' + Math.round(rc[2]) + ',' + (0.35 * rr2.life).toFixed(3) + ')';
+        ctx.lineWidth = 1.6; ctx.stroke();
+      }
+      // orbiting sparks with light trails while the AI works
+      if (orbT > 0.05) {
+        for (var oi = 0; oi < orbiters.length; oi++) {
+          var ob = orbiters[oi];
+          var oc = palAt(ob.pal + tf * 0.25);
+          var cosI = Math.cos(ob.inc), sinI = Math.sin(ob.inc);
+          for (var k2 = 7; k2 >= 0; k2--) {
+            var ang = tf * ob.sp * 2.1 + ob.ph - k2 * 0.085;
+            var ox = Math.cos(ang) * R * 1.30, oy = Math.sin(ang) * R * 0.52;
+            var rx = ox * cosI - oy * sinI, ry = ox * sinI + oy * cosI;
+            var front = 0.55 + 0.45 * Math.sin(ang + 1.2);
+            var ta = orbT * front * (k2 === 0 ? 0.95 : 0.28 * (1 - k2 / 8));
+            ctx.beginPath();
+            ctx.arc(cx + rx, cy + bob + ry, k2 === 0 ? 2.4 : 1.5, 0, 6.2832);
+            ctx.fillStyle = 'rgba(' + Math.round(oc[0]) + ',' + Math.round(oc[1]) + ',' + Math.round(oc[2]) + ',' + clamp(ta, 0, 1).toFixed(3) + ')';
+            ctx.fill();
+          }
+        }
+      }
+      ctx.restore();
+    }
     if (ripples.length) {
       ctx.save();
-      ctx.beginPath(); ctx.arc(cx, cy + bob, R * pulse, 0, 6.2832); ctx.clip();
-      for (var rg = 0; rg < ripples.length; rg++) {
-        var rr = ripples[rg];
+      ctx.beginPath(); ctx.arc(cx, cy + bob, R * pulse * (1 + cAmp), 0, 6.2832); ctx.clip();
+      for (var rg2 = 0; rg2 < ripples.length; rg2++) {
+        var rr = ripples[rg2];
         ctx.beginPath(); ctx.arc(rr.x, rr.y, rr.r, 0, 6.2832);
         ctx.strokeStyle = 'rgba(120,235,255,' + (0.6 * rr.life).toFixed(3) + ')';
         ctx.lineWidth = 2.0; ctx.stroke();
@@ -3069,7 +3165,21 @@ var GlobeFX = (function () {
   return {
     mount: mount,
     setState: function (x) { state = x; },
-    kick: function () { kickSpin = Math.min(0.06, kickSpin + 0.018); pop = Math.min(0.22, pop + 0.16); },
+    kick: function () {
+      kickSpin = Math.min(0.06, kickSpin + 0.018); pop = Math.min(0.22, pop + 0.16);
+      flowKick = Math.min(0.28, flowKick + 0.10);
+      // keystroke = localized ripple, as if it's listening
+      if (cvs && ripples.length < 6) {
+        var aa = Math.random() * 6.28, rr = R * (0.3 + Math.random() * 0.7);
+        ripples.push({ x: cx + Math.cos(aa) * rr, y: cy + Math.sin(aa) * rr, r: 0, life: 0.9 });
+      }
+    },
+    pulse: function () {
+      // one beat per revealed block of the streamed answer
+      pop = Math.min(0.30, pop + 0.10);
+      flowKick = Math.min(0.30, flowKick + 0.12);
+      if (rings.length < 4) rings.push({ r: R * 0.82, life: 0.85 });
+    },
     celebrate: function () { party = 120; },
     remount: function () { var c = document.getElementById('globe-canvas'); if (c) mount(c); }
   };
@@ -3079,31 +3189,37 @@ var GlobeFX = (function () {
 document.addEventListener('DOMContentLoaded', function () { GlobeFX.remount(); });
 setTimeout(function () { GlobeFX.remount(); }, 200);
 
-// Transform the persistent globe between the big hero pose and a small docked pose.
+// Transform the persistent globe between poses: big hero on the welcome
+// screen, small dock in the header corner, and a prominent centered focus
+// pose while the AI is actively working.
 function setGlobeMode(mode) {
   var st = document.getElementById('globe-stage');
   var cv = document.getElementById('globe-canvas');
   if (!st || !cv) return;
+  st.classList.remove('globe-mode-hero', 'globe-mode-dock', 'globe-mode-focus');
+  var sw = st.offsetWidth || window.innerWidth;
+  var hw = cv.offsetWidth, hh = cv.offsetHeight;        // layout size, ignores any transform
+  var hcx = cv.offsetLeft + hw / 2, hcy = cv.offsetTop + hh / 2;
   if (mode === 'dock') {
-    st.classList.remove('globe-mode-hero');
     st.classList.add('globe-mode-dock');
-    var sw = st.offsetWidth || window.innerWidth;
-    var hw = cv.offsetWidth, hh = cv.offsetHeight;      // layout size, ignores any transform
-    var hcx = cv.offsetLeft + hw / 2, hcy = cv.offsetTop + hh / 2;
     var dsize = window.innerWidth <= 700 ? 44 : 50;
     var margin = window.innerWidth <= 700 ? 12 : 24;
     var dcx = sw - margin - dsize / 2, dcy = 14 + dsize / 2;
-    var dx = Math.round(dcx - hcx), dy = Math.round(dcy - hcy);
-    cv.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(' + (dsize / hw).toFixed(4) + ')';
+    cv.style.transform = 'translate(' + Math.round(dcx - hcx) + 'px,' + Math.round(dcy - hcy) + 'px) scale(' + (dsize / hw).toFixed(4) + ')';
+  } else if (mode === 'focus') {
+    st.classList.add('globe-mode-focus');
+    var fsize = window.innerWidth <= 700 ? 140 : 170;
+    var fcx = sw / 2, fcy = Math.max(96, Math.round(window.innerHeight * 0.30) - 56);
+    cv.style.transform = 'translate(' + Math.round(fcx - hcx) + 'px,' + Math.round(fcy - hcy) + 'px) scale(' + (fsize / hw).toFixed(4) + ')';
   } else {
-    st.classList.remove('globe-mode-dock');
     st.classList.add('globe-mode-hero');
     cv.style.transform = '';
   }
+  st._mode = mode;
 }
 window.addEventListener('resize', function () {
   var st = document.getElementById('globe-stage');
-  if (st && st.classList.contains('globe-mode-dock')) setGlobeMode('dock');
+  if (st && (st._mode === 'dock' || st._mode === 'focus')) setGlobeMode(st._mode);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3164,10 +3280,13 @@ if (window.caches && caches.keys) {
    loop stops when the login screen closes. */
 var LoginCinema=(function(){
   var VIDEO_URL='https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260616_212935_bbf608da-62d1-4f25-9be4-c346e4d09cc8.mp4';
-  var scroller,canvas,ctx,video,pCvs,pCtx,cards,grid,trigger,hero,threeInner;
+  var scroller,canvas,ctx,video,pCvs,pCtx,cards,grid,trigger,hero,threeInner,vidWrap;
   var frames=[],framesReady=false,lastFrame=-1,seeking=false,extracting=false;
   var ps=[],sprite=null,spriteCyan=null,pW=0,pH=0;
-  var raf=null,running=false,inited=false;
+  var raf=null,running=false,inited=false,lastTS=0;
+  // interactive bloom state: ambient auto-advance, drag scrub, pointer parallax
+  var cur=0,ambient=0,ambientDir=1,dragP=0,dragging=false,dragX=0;
+  var pxT=0,pyT=0,pxS=0,pyS=0;
   var reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion:reduce)').matches;
   var saveData=!!(navigator.connection&&navigator.connection.saveData);
   var MOB=innerWidth<=700;
@@ -3224,8 +3343,7 @@ var LoginCinema=(function(){
     var dw=f.width*s,dh=f.height*s;
     ctx.drawImage(f,(cw-dw)/2,(ch-dh)/2,dw,dh);
   }
-  function videoTick(){
-    var p=progress();
+  function videoTick(p){
     if(framesReady&&frames.length){
       var idx=Math.round(p*(frames.length-1));
       if(idx!==lastFrame){lastFrame=idx;if(frames[idx])drawFrame(frames[idx]);}
@@ -3294,10 +3412,31 @@ var LoginCinema=(function(){
   }
 
   // ── main loop / lifecycle ──────────────────────────────────────────────
-  function loop(){
+  // At the top of the page the bloom advances on its own (ping-pong) and can
+  // be scrubbed by dragging; once the user scrolls, scroll position takes over.
+  function loop(ts){
     if(!running)return;
     raf=requestAnimationFrame(loop);
-    videoTick();
+    var dt=lastTS?Math.min(0.05,(ts-lastTS)/1000):0.016;
+    lastTS=ts;
+    var target;
+    if(scroller.scrollTop>4){
+      target=progress();
+      ambient=target;dragP=0;
+    }else{
+      if(!reduce){
+        ambient+=ambientDir*dt*0.07;
+        if(ambient>=1){ambient=1;ambientDir=-1;}
+        else if(ambient<=0){ambient=0;ambientDir=1;}
+      }
+      target=Math.max(0,Math.min(1,ambient+dragP));
+    }
+    cur+=(target-cur)*Math.min(1,dt*6);
+    videoTick(cur);
+    if(!reduce&&vidWrap){
+      pxS+=(pxT-pxS)*0.06;pyS+=(pyT-pyS)*0.06;
+      vidWrap.style.transform='translate3d('+(-pxS*18).toFixed(2)+'px,'+(-pyS*12).toFixed(2)+'px,0) scale(1.07)';
+    }
     uiTick();
     if(!reduce&&pCtx)pTick();
   }
@@ -3318,11 +3457,24 @@ var LoginCinema=(function(){
     hero=document.getElementById('lxvHero');
     threeInner=document.getElementById('lxvThreeInner');
     if(!scroller||!canvas||!video)return false;
+    vidWrap=scroller.querySelector('.lxv-video');
     ctx=canvas.getContext('2d');
     canvas.style.visibility='hidden';
     video.addEventListener('seeked',function(){seeking=false;});
     video.addEventListener('stalled',function(){seeking=false;});
     video.addEventListener('loadeddata',function(){video.currentTime=0;});
+    // interactivity: drag horizontally to scrub the bloom, pointer moves parallax it
+    scroller.addEventListener('pointerdown',function(e){dragging=true;dragX=e.clientX;},{passive:true});
+    scroller.addEventListener('pointermove',function(e){
+      pxT=e.clientX/innerWidth-0.5;pyT=e.clientY/innerHeight-0.5;
+      if(dragging){
+        dragP=Math.max(-1,Math.min(1,dragP+(e.clientX-dragX)/innerWidth*1.4));
+        dragX=e.clientX;
+      }
+    },{passive:true});
+    addEventListener('pointerup',function(){dragging=false;});
+    scroller.addEventListener('pointercancel',function(){dragging=false;});
+    if(reduce)ambient=0.65; // static mid-bloom for reduced motion
     if(!reduce&&pCvs){
       pCtx=pCvs.getContext('2d');
       sprite=makeSprite(255,255,255);
@@ -3342,7 +3494,9 @@ var LoginCinema=(function(){
     if(!inited&&!init())return;
     if(running)return;
     running=true;
+    lastTS=0;
     scroller.scrollTop=0;
+    video.preload='auto'; // login is visible now — let the fallback paint frames early
     resizeCanvas();
     if(!reduce&&pCtx)resizeParticles();
     extractFrames();
