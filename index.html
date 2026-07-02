@@ -189,6 +189,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
   background:radial-gradient(ellipse at 50% -20%,#151038 0%,#0a0a1f 42%,#05050f 100%);
   align-items:center;justify-content:center}
 #globe3d{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:0}
+#login-particles{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:1;pointer-events:none}
 .lx-aurora{position:absolute;inset:-25%;z-index:0;pointer-events:none;filter:blur(34px);
   background:radial-gradient(38% 38% at 20% 22%,rgba(0,229,255,.16),transparent 70%),
     radial-gradient(44% 44% at 82% 30%,rgba(139,92,246,.18),transparent 70%),
@@ -876,6 +877,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 <!-- ═══ PREMIUM LOGIN ══════════════════════════════════════════════ -->
 <div id="login-screen" role="dialog" aria-modal="true" aria-label="Sign in to Curious Minds">
   <canvas id="globe3d" aria-hidden="true"></canvas>
+  <canvas id="login-particles" aria-hidden="true"></canvas>
   <div class="lx-aurora" aria-hidden="true"></div>
   <div class="lx-grid" aria-hidden="true"></div>
   <div class="lx-cursor-glow" id="lxGlow" aria-hidden="true"></div>
@@ -2459,6 +2461,7 @@ function showApp(){
   if(ls) ls.style.display = 'none';
   if(ma) ma.style.display = 'flex';
   if(window.Globe3D) Globe3D.stop();
+  if(window.LoginParticles) LoginParticles.stop();
   loadCfg(); loadConvos(); renderSb();
   updateSidebarUser();
   autoLoadMetaAccounts();
@@ -2472,6 +2475,7 @@ function showLogin(){
   if(ls) ls.style.display='flex';
   tryRenderGIS();
   if(window.Globe3D) Globe3D.start();
+  if(window.LoginParticles) LoginParticles.start();
   initLoginFX();
 }
 
@@ -3120,6 +3124,63 @@ if (window.caches && caches.keys) {
 }
 
 /* ═══ Premium login: Three.js globe + interactions ═══════════════════════════ */
+var LoginParticles=(function(){
+  var cvs,ctx,parts=[],raf=0,running=false,W=0,H=0,DPR=1;
+  function size(){
+    cvs=cvs||document.getElementById('login-particles'); if(!cvs)return;
+    DPR=Math.min(window.devicePixelRatio||1,2);
+    W=window.innerWidth; H=window.innerHeight;
+    cvs.width=Math.round(W*DPR); cvs.height=Math.round(H*DPR);
+    ctx=cvs.getContext('2d'); ctx.setTransform(DPR,0,0,DPR,0,0);
+    build();
+  }
+  function build(){
+    parts=[];
+    var count=Math.max(28,Math.min(160,Math.floor((W*H)/(W<=700?20000:12000))));
+    for(var i=0;i<count;i++){
+      parts.push({
+        x:Math.random()*W, y:Math.random()*H,
+        vx:(Math.random()-0.5)*0.3, vy:(Math.random()-0.5)*0.3,
+        size:Math.random()*1.5+0.5,
+        base:Math.random()*0.5+0.18,
+        tw:Math.random()*0.02+0.004, ph:Math.random()*Math.PI*2,
+        cyan:Math.random()<0.22          // a few brand-cyan sparks among the white
+      });
+    }
+  }
+  function frame(){
+    if(!running)return;
+    ctx.clearRect(0,0,W,H);
+    for(var i=0;i<parts.length;i++){
+      var p=parts[i];
+      p.x+=p.vx; p.y+=p.vy; p.ph+=p.tw;
+      if(p.x<0)p.x=W; else if(p.x>W)p.x=0;
+      if(p.y<0)p.y=H; else if(p.y>H)p.y=0;
+      var op=p.base+Math.sin(p.ph)*0.16;
+      if(op<0.04)op=0.04;
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
+      ctx.fillStyle=p.cyan?('rgba(120,232,255,'+op+')'):('rgba(255,255,255,'+op+')');
+      ctx.fill();
+    }
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){
+    cvs=document.getElementById('login-particles'); if(!cvs)return;
+    var reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion:reduce)').matches;
+    size();
+    if(reduce){ // draw one static field, no animation
+      running=false; ctx.clearRect(0,0,W,H);
+      for(var i=0;i<parts.length;i++){var p=parts[i];ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,'+p.base+')';ctx.fill();}
+      return;
+    }
+    if(running)return; running=true; cancelAnimationFrame(raf); raf=requestAnimationFrame(frame);
+  }
+  function stop(){ running=false; cancelAnimationFrame(raf); }
+  window.addEventListener('resize',function(){ if(cvs&&document.getElementById('login-screen')&&document.getElementById('login-screen').style.display!=='none'){ size(); } });
+  return {start:start,stop:stop};
+})();
+
 var Globe3D=(function(){
   var cvs,renderer,scene,cam,composer,group,mesh,mat,atmo,starsN,starsF,neb=[],raf=null,inited=false,reduce=false;
   var W,H,uT=0,mx=0,my=0,tX=0,vy=0.0016,baseSpin=0.0016,dragging=false,lx=0,ly=0,dragX=0,hoverT=0,hover=0;
