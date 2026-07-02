@@ -179,11 +179,11 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 
 /* ── LOGIN SCREEN (Veldara scroll experience) ─────────────────────────────── */
 #login-screen{display:none;position:fixed;inset:0;z-index:200;overflow-x:hidden;overflow-y:auto;
-  background:#010101;-webkit-overflow-scrolling:touch;
+  background:#010101;-webkit-overflow-scrolling:touch;touch-action:pan-y;
   font-family:'Inter',var(--fm),sans-serif;color:#fff}
 
 /* Scroll video — fixed backdrop scrubbed by scroll position */
-.lxv-video{position:fixed;inset:0;top:-20%;z-index:-10;background:#0a0a0a}
+.lxv-video{position:fixed;inset:0;top:-20%;z-index:-10;background:#0a0a0a;will-change:transform}
 .lxv-video canvas,.lxv-video video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:translateZ(0)}
 .lxv-overlay{position:absolute;inset:0;background:rgba(0,0,0,.2)}
 
@@ -3164,10 +3164,13 @@ if (window.caches && caches.keys) {
    loop stops when the login screen closes. */
 var LoginCinema=(function(){
   var VIDEO_URL='https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260616_212935_bbf608da-62d1-4f25-9be4-c346e4d09cc8.mp4';
-  var scroller,canvas,ctx,video,pCvs,pCtx,cards,grid,trigger,hero,threeInner;
+  var scroller,canvas,ctx,video,pCvs,pCtx,cards,grid,trigger,hero,threeInner,vidWrap;
   var frames=[],framesReady=false,lastFrame=-1,seeking=false,extracting=false;
   var ps=[],sprite=null,spriteCyan=null,pW=0,pH=0;
-  var raf=null,running=false,inited=false;
+  var raf=null,running=false,inited=false,lastTS=0;
+  // interactive bloom state: ambient auto-advance, drag scrub, pointer parallax
+  var cur=0,ambient=0,ambientDir=1,dragP=0,dragging=false,dragX=0;
+  var pxT=0,pyT=0,pxS=0,pyS=0;
   var reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion:reduce)').matches;
   var saveData=!!(navigator.connection&&navigator.connection.saveData);
   var MOB=innerWidth<=700;
@@ -3224,8 +3227,7 @@ var LoginCinema=(function(){
     var dw=f.width*s,dh=f.height*s;
     ctx.drawImage(f,(cw-dw)/2,(ch-dh)/2,dw,dh);
   }
-  function videoTick(){
-    var p=progress();
+  function videoTick(p){
     if(framesReady&&frames.length){
       var idx=Math.round(p*(frames.length-1));
       if(idx!==lastFrame){lastFrame=idx;if(frames[idx])drawFrame(frames[idx]);}
@@ -3294,10 +3296,31 @@ var LoginCinema=(function(){
   }
 
   // ── main loop / lifecycle ──────────────────────────────────────────────
-  function loop(){
+  // At the top of the page the bloom advances on its own (ping-pong) and can
+  // be scrubbed by dragging; once the user scrolls, scroll position takes over.
+  function loop(ts){
     if(!running)return;
     raf=requestAnimationFrame(loop);
-    videoTick();
+    var dt=lastTS?Math.min(0.05,(ts-lastTS)/1000):0.016;
+    lastTS=ts;
+    var target;
+    if(scroller.scrollTop>4){
+      target=progress();
+      ambient=target;dragP=0;
+    }else{
+      if(!reduce){
+        ambient+=ambientDir*dt*0.07;
+        if(ambient>=1){ambient=1;ambientDir=-1;}
+        else if(ambient<=0){ambient=0;ambientDir=1;}
+      }
+      target=Math.max(0,Math.min(1,ambient+dragP));
+    }
+    cur+=(target-cur)*Math.min(1,dt*6);
+    videoTick(cur);
+    if(!reduce&&vidWrap){
+      pxS+=(pxT-pxS)*0.06;pyS+=(pyT-pyS)*0.06;
+      vidWrap.style.transform='translate3d('+(-pxS*18).toFixed(2)+'px,'+(-pyS*12).toFixed(2)+'px,0) scale(1.07)';
+    }
     uiTick();
     if(!reduce&&pCtx)pTick();
   }
@@ -3318,11 +3341,24 @@ var LoginCinema=(function(){
     hero=document.getElementById('lxvHero');
     threeInner=document.getElementById('lxvThreeInner');
     if(!scroller||!canvas||!video)return false;
+    vidWrap=scroller.querySelector('.lxv-video');
     ctx=canvas.getContext('2d');
     canvas.style.visibility='hidden';
     video.addEventListener('seeked',function(){seeking=false;});
     video.addEventListener('stalled',function(){seeking=false;});
     video.addEventListener('loadeddata',function(){video.currentTime=0;});
+    // interactivity: drag horizontally to scrub the bloom, pointer moves parallax it
+    scroller.addEventListener('pointerdown',function(e){dragging=true;dragX=e.clientX;},{passive:true});
+    scroller.addEventListener('pointermove',function(e){
+      pxT=e.clientX/innerWidth-0.5;pyT=e.clientY/innerHeight-0.5;
+      if(dragging){
+        dragP=Math.max(-1,Math.min(1,dragP+(e.clientX-dragX)/innerWidth*1.4));
+        dragX=e.clientX;
+      }
+    },{passive:true});
+    addEventListener('pointerup',function(){dragging=false;});
+    scroller.addEventListener('pointercancel',function(){dragging=false;});
+    if(reduce)ambient=0.65; // static mid-bloom for reduced motion
     if(!reduce&&pCvs){
       pCtx=pCvs.getContext('2d');
       sprite=makeSprite(255,255,255);
@@ -3342,7 +3378,9 @@ var LoginCinema=(function(){
     if(!inited&&!init())return;
     if(running)return;
     running=true;
+    lastTS=0;
     scroller.scrollTop=0;
+    video.preload='auto'; // login is visible now — let the fallback paint frames early
     resizeCanvas();
     if(!reduce&&pCtx)resizeParticles();
     extractFrames();
