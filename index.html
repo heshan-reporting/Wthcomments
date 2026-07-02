@@ -12,7 +12,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>CMM Ads Intelligence — Curious Minds Media</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
 <style>
@@ -854,6 +854,93 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 @keyframes apspin{to{transform:rotate(360deg)}}
 .ap-state .ap-refresh{display:inline-flex;margin-top:14px}
 @media(max-width:700px){.ap-list{max-height:62vh}.ap-search{font-size:16px}}
+
+/* ═══ V4 · COMMERCIAL DESIGN PASS ═══════════════════════════════════════════ */
+:root{
+  --fd:'Space Grotesk',var(--fm);
+  --bg:#05070f;--bg2:#0a0e1d;
+  --text:#e9efff;--text-2:#8b99c4;--text-3:#4a5580;
+}
+::selection{background:rgba(0,229,255,.24);color:#fff}
+:focus-visible{outline:2px solid rgba(0,229,255,.55);outline-offset:2px;border-radius:6px}
+button,.chip,.feat-card,.acct-pill,.ap-item{cursor:pointer}
+
+/* header — gradient hairline + display type */
+.ch-hdr{position:relative}
+.ch-hdr::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:1px;pointer-events:none;
+  background:linear-gradient(90deg,transparent,rgba(0,229,255,.32),rgba(139,92,246,.28),transparent)}
+.ch-title{font-family:var(--fd);letter-spacing:-0.01em}
+
+/* welcome hero */
+.welcome-eyebrow{font-family:var(--fmono);font-size:10px;letter-spacing:.34em;color:var(--text-3);
+  text-transform:uppercase;margin-bottom:14px;animation:fadeUp .4s ease both}
+.welcome-headline{font-family:var(--fd);font-size:42px;font-weight:700;letter-spacing:-0.022em;line-height:1.08;
+  background:linear-gradient(100deg,#ffffff 8%,#9fd9ff 46%,#c4b5fd 82%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.welcome-sub{font-size:13px;color:var(--text-2);letter-spacing:.01em;line-height:1.6;max-width:560px}
+
+/* capability cards */
+.feat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;width:100%;max-width:600px;
+  margin:26px 0 28px;animation:fadeUp .45s ease .12s both}
+.feat-card{position:relative;text-align:left;padding:16px 16px 15px;border-radius:16px;border:1px solid var(--border);
+  background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.015));
+  transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
+.feat-card:hover{transform:translateY(-2px);border-color:var(--border-hv);box-shadow:0 12px 36px rgba(0,0,0,.5)}
+.feat-card::before{content:'';position:absolute;inset:-1px;border-radius:17px;padding:1px;pointer-events:none;
+  background:linear-gradient(135deg,rgba(0,229,255,.45),transparent 34%,transparent 66%,rgba(139,92,246,.45));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;
+  opacity:0;transition:opacity .18s}
+.feat-card:hover::before{opacity:1}
+.feat-ic{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:11px}
+.feat-ic svg{width:17px;height:17px}
+.feat-ic.c1{background:rgba(0,229,255,.10);color:var(--cyan)}
+.feat-ic.c2{background:rgba(244,114,182,.10);color:var(--pink)}
+.feat-ic.c3{background:rgba(52,211,153,.10);color:var(--grn)}
+.feat-ic.c4{background:rgba(251,191,36,.10);color:var(--amb)}
+.feat-t{font-family:var(--fd);font-size:13.5px;font-weight:600;color:var(--text);margin-bottom:4px}
+.feat-d{font-size:11.5px;line-height:1.55;color:var(--text-2)}
+
+/* political chips + tool-card variants */
+.cg-label.polit{color:var(--amb)}
+.chip.p:hover{border-color:var(--amb);color:var(--amb);background:rgba(251,191,36,.07);box-shadow:0 4px 16px rgba(251,191,36,.12)}
+.tool-card.adlib{border-color:rgba(244,114,182,.22)}.tool-card.adlib .tool-lbl{color:var(--pink)}
+.tool-card.fec{border-color:rgba(251,191,36,.22)}.tool-card.fec .tool-lbl{color:var(--amb)}
+.tool-card.news{border-color:rgba(52,211,153,.22)}.tool-card.news .tool-lbl{color:var(--grn)}
+.tool-card.wiki{border-color:rgba(255,255,255,.16)}.tool-card.wiki .tool-lbl{color:var(--text-2)}
+
+/* data tables — commercial grade */
+.msg.ai .mbubble table{border:1px solid var(--tbl-bd);border-radius:12px;border-collapse:separate;border-spacing:0;overflow:hidden}
+.msg.ai .mbubble th{background:#0d1226;font-family:var(--fmono);font-size:10.5px;font-weight:500;
+  letter-spacing:.07em;text-transform:uppercase;color:var(--text-2)}
+.msg.ai .mbubble td{font-variant-numeric:tabular-nums}
+.msg.ai .mbubble tbody tr{transition:background .12s}
+.msg.ai .mbubble tbody tr:hover{background:rgba(0,229,255,.045)}
+.msg.ai .mbubble td:first-child{color:var(--text);font-weight:500}
+
+/* modal + input polish */
+.mhd-title{font-family:var(--fd);letter-spacing:-0.01em}
+.inp-pill{transition:border-color .18s,box-shadow .18s}
+.inp-pill:focus-within{border-color:rgba(0,229,255,.45);box-shadow:0 0 0 3px rgba(0,229,255,.08),0 10px 40px rgba(0,0,0,.4)}
+
+/* scrollbars */
+*::-webkit-scrollbar{width:8px;height:8px}
+*::-webkit-scrollbar-thumb{background:rgba(255,255,255,.10);border-radius:4px;border:2px solid transparent;background-clip:content-box}
+*::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.18);border:2px solid transparent;background-clip:content-box}
+*::-webkit-scrollbar-track{background:transparent}
+
+/* mobile fit for the new hero */
+@media(max-width:700px){
+  .welcome-headline{font-size:27px}
+  .welcome-eyebrow{font-size:9px;letter-spacing:.28em;margin-bottom:10px}
+  .welcome-sub{font-size:11.5px}
+  .feat-grid{gap:9px;margin:20px 0 20px}
+  .feat-card{padding:13px 12px 12px;border-radius:14px}
+  .feat-ic{width:30px;height:30px;margin-bottom:8px}
+  .feat-t{font-size:12.5px}
+  .feat-d{font-size:10.5px}
+}
+@media(prefers-reduced-motion:reduce){.feat-card,.feat-card::before,.chip{transition:none!important;animation:none!important}}
+
 </style>
 </head>
 <body>
@@ -1349,30 +1436,58 @@ function clearChat(){if(aid){convos=convos.filter(c=>c.id!==aid);storeConvos()}n
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
 function welcomeHTML(){
+  var name=(typeof currentUser!=='undefined'&&currentUser&&currentUser.given_name&&currentUser.given_name!=='Guest')?'Hello '+currentUser.given_name+', ':'';
   return`<div class="welcome" id="welcome">
   <div class="welcome-content">
-    <div class="welcome-headline">${(typeof currentUser!=='undefined'&&currentUser&&currentUser.given_name&&currentUser.given_name!=='Guest')?'Hello '+currentUser.given_name+', ':''}Ask away!</div>
-    <div class="welcome-sub">Google Ads &middot; Meta Ads &middot; TikTok Ads &middot; LinkedIn Ads</div>
+    <div class="welcome-eyebrow">CMM Intelligence Platform</div>
+    <div class="welcome-headline">${name}Ask away!</div>
+    <div class="welcome-sub">Cross-channel ad analytics &middot; political ad intelligence &middot; media monitoring &middot; campaign finance</div>
+    <div class="feat-grid">
+      <div class="feat-card" data-q="Give me a cross-platform performance overview for the last 30 days across Google, Meta, TikTok and LinkedIn — spend, results, and what needs fixing." onclick="sendPrompt(this)">
+        <div class="feat-ic c1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></div>
+        <div class="feat-t">Cross-Channel Analytics</div>
+        <div class="feat-d">Google, Meta, TikTok &amp; LinkedIn performance in one answer.</div>
+      </div>
+      <div class="feat-card" data-q="Who is running political ads about the economy in the US right now? Show the top advertisers with spend ranges and funding entities." onclick="sendPrompt(this)">
+        <div class="feat-ic c2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg></div>
+        <div class="feat-t">Political Ad Intelligence</div>
+        <div class="feat-d">Meta Ad Library — advertisers, funding entities, spend &amp; reach.</div>
+      </div>
+      <div class="feat-card" data-q="Show the media coverage volume trend for the 2026 US midterm elections over the last 30 days and summarize the top stories driving it." onclick="sendPrompt(this)">
+        <div class="feat-ic c3"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg></div>
+        <div class="feat-t">Media Monitoring</div>
+        <div class="feat-d">GDELT — 100k+ outlets, coverage volume, tone &amp; narratives.</div>
+      </div>
+      <div class="feat-card" data-q="Using FEC data, list the top-raising US Senate candidates this election cycle with total receipts and cash on hand." onclick="sendPrompt(this)">
+        <div class="feat-ic c4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg></div>
+        <div class="feat-t">Campaign Finance</div>
+        <div class="feat-d">Official FEC filings — fundraising, PACs, independent spend.</div>
+      </div>
+    </div>
     <div class="chip-groups">
+      <div><div class="cg-label polit">Political Intelligence</div>
+      <div class="chips">
+        <div class="chip p" onclick="sendChip(this)">Top political ad spenders on Meta right now</div>
+        <div class="chip p" onclick="sendChip(this)">Who is running ads about immigration in the US?</div>
+        <div class="chip p" onclick="sendChip(this)">Top-raising Senate candidates this cycle</div>
+        <div class="chip p" onclick="sendChip(this)">News coverage trend: 2026 midterms, last 30 days</div>
+      </div></div>
       <div><div class="cg-label google">Google Ads</div>
       <div class="chips">
         <div class="chip g" onclick="sendChip(this)">Campaigns + spend last 30 days</div>
         <div class="chip g" onclick="sendChip(this)">Top keywords by cost</div>
         <div class="chip g" onclick="sendChip(this)">Cost per conversion by campaign</div>
-        <div class="chip g" onclick="sendChip(this)">Device breakdown this month</div>
       </div></div>
       <div><div class="cg-label meta">Meta / Facebook Ads</div>
       <div class="chips">
         <div class="chip f" onclick="sendChip(this)">All Meta campaigns last 30 days</div>
         <div class="chip f" onclick="sendChip(this)">Best performing ad sets</div>
         <div class="chip f" onclick="sendChip(this)">Age and gender breakdown</div>
-        <div class="chip f" onclick="sendChip(this)">Top ads by CTR and spend</div>
       </div></div>
       <div><div class="cg-label cross">Deep Analysis</div>
       <div class="chips">
         <div class="chip x" onclick="sendChip(this)">Compare Google vs Meta &mdash; full breakdown</div>
         <div class="chip x" onclick="sendChip(this)">Which platform should get more budget?</div>
-        <div class="chip x" onclick="sendChip(this)">Find underperforming campaigns on both platforms</div>
       </div></div>
     </div>
   </div></div>`;
@@ -1411,7 +1526,8 @@ function appendToolCard(platform, desc, detail, isAsync){
   const el=document.createElement('div');el.className='msg ai';
   const uid='tc'+Date.now()+Math.random().toString(36).slice(2,7);
   const cls=platform; // 'meta' | 'google' | 'tiktok'
-  const lbl=platform==='meta'?'Meta Marketing API':(platform==='tiktok'?'TikTok Ads API':(platform==='linkedin'?'LinkedIn Marketing API':'Google Ads API'));
+  const NAMES={meta:'Meta Marketing API',tiktok:'TikTok Ads API',linkedin:'LinkedIn Marketing API',google:'Google Ads API',adlib:'Meta Ad Library',fec:'FEC · Campaign Finance',news:'GDELT News Monitor',wiki:'Wikipedia Attention'};
+  const lbl=NAMES[platform]||'Data API';
   const asyncBadge=isAsync?`<span class="async-badge">ASYNC JOB</span>`:'';
   const searchIcon=`<svg class="tool-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`;
   el.innerHTML=`<div class="ai-av mavatar"><div class="msg-orb"></div></div><div class="mbody"><div class="tool-card ${cls}" data-status="p">${searchIcon}<div class="tool-info"><div class="tool-lbl">${lbl} ${asyncBadge}</div><div class="tool-desc">${esc(desc)}</div><div class="tool-query">${esc(detail)}</div></div><span class="tool-st p" id="${uid}">Fetching…</span></div></div>`;
@@ -1478,6 +1594,19 @@ async function metaQuery(path,params,useAsync){
   var body={source:'meta_ads',path,params,useAsync:useAsync||false};
   if(cfg.fbid)body.adAccountId=cfg.fbid;
   return callWorker(body);
+}
+
+async function politQuery(source,input){
+  if(!cfg.wurl)return{error:'No Worker URL — open Configuration'};
+  var body={source:source};
+  Object.keys(input||{}).forEach(function(k){if(k!=='description')body[k]=input[k];});
+  return callWorker(body);
+}
+function politRows(r){
+  try{var p=JSON.parse(r.data);var n=p.total!==undefined?p.total:(p.data&&p.data.length);
+    if(n!==undefined)return n+' rows'+(p.truncated?' (truncated)':'');
+    return (r.data.length/1024).toFixed(1)+'kb';
+  }catch(e){return 'data received'}
 }
 
 // ── Claude tools ──────────────────────────────────────────────────────────────
@@ -1768,13 +1897,71 @@ EXAMPLES:
       accountId:{type:'string',description:'Override the default account ID'},
       description:{type:'string',description:'One-line description shown in UI'}
     },required:['description']}
+  },{
+    name:'query_meta_ad_library',
+    description:'Search the PUBLIC Meta Ad Library (ads_archive) for political and social-issue ads running on Facebook/Instagram — any advertiser, not just your own accounts. Returns advertiser page, funding entity (bylines), spend and impression RANGES, demographic distribution and delivery by region. Use for: who is advertising on a political topic, top political ad spenders, an organisation\u2019s political ads, issue-campaign monitoring.',
+    input_schema:{type:'object',properties:{
+      searchTerms:{type:'string',description:'Keywords matched against ad text, e.g. "immigration" or "climate change"'},
+      pageIds:{type:'array',items:{type:'string'},description:'Restrict to specific Facebook Page IDs'},
+      countries:{type:'array',items:{type:'string'},description:'ISO-3166 codes the ads reached. Default ["US"]'},
+      activeStatus:{type:'string',description:'ACTIVE | INACTIVE | ALL (default ALL)'},
+      since:{type:'string',description:'Earliest delivery date YYYY-MM-DD'},
+      until:{type:'string',description:'Latest delivery date YYYY-MM-DD'},
+      limit:{type:'number',description:'Max ads returned. Default 25, max 100'},
+      description:{type:'string',description:'One-line description shown in UI'}
+    },required:['description']}
+  },{
+    name:'query_fec',
+    description:'Official US Federal Election Commission campaign-finance data (api.open.fec.gov). Endpoints: /candidates/search/ (find candidates), /candidate/{id}/totals/ (fundraising totals), /committees/, /committee/{id}/totals/, /schedules/schedule_a/ (itemized receipts/donors), /schedules/schedule_b/ (disbursements), /schedules/schedule_e/ (independent expenditures), /elections/. Use for: who raised or spent what, PAC activity, donor patterns, race-level finance.',
+    input_schema:{type:'object',properties:{
+      endpoint:{type:'string',description:'FEC API path, e.g. /candidates/search/ or /schedules/schedule_e/'},
+      params:{type:'object',description:'Query params, e.g. {"q":"smith","cycle":2026,"office":"S","sort":"-total_receipts","per_page":20}'},
+      description:{type:'string',description:'One-line description shown in UI'}
+    },required:['endpoint','description']}
+  },{
+    name:'query_gdelt_news',
+    description:'GDELT global news monitoring — 100k+ outlets in 65 languages, updated every 15 min, searches the last 3 months. mode=artlist returns matching articles; mode=timelinevol returns a coverage-volume timeline; mode=tonechart returns sentiment distribution. Query operators: "exact phrase", OR, sourcecountry:US, domain:cnn.com, tone<-5. Use for: media coverage of candidates/topics, narrative tracking, earned-media trends, crisis monitoring.',
+    input_schema:{type:'object',properties:{
+      query:{type:'string',description:'Search query, e.g. "election integrity" sourcecountry:US'},
+      mode:{type:'string',description:'artlist | timelinevol | tonechart (default artlist)'},
+      timespan:{type:'string',description:'e.g. 24h, 7d, 4w, 3m (default 7d, max 3m)'},
+      maxrecords:{type:'number',description:'Articles for artlist. Default 25, max 75'},
+      description:{type:'string',description:'One-line description shown in UI'}
+    },required:['query','description']}
+  },{
+    name:'query_wiki_attention',
+    description:'Daily Wikipedia pageview counts for any article — a strong public-attention proxy for politicians, parties and policy topics. Compare candidates or track attention spikes around events. Article titles must match Wikipedia exactly (e.g. "Gavin Newsom").',
+    input_schema:{type:'object',properties:{
+      article:{type:'string',description:'Exact Wikipedia article title'},
+      start:{type:'string',description:'Start date YYYYMMDD'},
+      end:{type:'string',description:'End date YYYYMMDD'},
+      project:{type:'string',description:'Wiki project (default en.wikipedia)'},
+      description:{type:'string',description:'One-line description shown in UI'}
+    },required:['article','start','end','description']}
   }];
 
 const DEFAULT_SYS=`You are the CMM Ads Intelligence assistant, built by Curious Minds Media.
 You are a senior performance marketing analyst with expert-level knowledge of Meta (Facebook/Instagram) Ads and TikTok Ads.
 
 ## PLATFORMS
-You have FOUR tools: query_google_ads (Google Ads, GAQL via API v21), query_meta_ads (Meta), query_tiktok_ads (TikTok), and query_linkedin_ads (LinkedIn). Use the right tool per platform. For cross-platform questions, call all relevant tools and normalise currency, date range, and metric definitions before comparing.
+You have EIGHT tools across two suites.
+
+Paid-media suite: query_google_ads (Google Ads, GAQL via API v21), query_meta_ads (Meta), query_tiktok_ads (TikTok), query_linkedin_ads (LinkedIn). Use the right tool per platform. For cross-platform questions, call all relevant tools and normalise currency, date range, and metric definitions before comparing.
+
+Political & public-affairs suite:
+- query_meta_ad_library — Meta's PUBLIC Ad Library. Political & social-issue ads from ANY advertiser: page, funding entity (bylines), spend & impressions as RANGES, demographic_distribution, delivery_by_region.
+- query_fec — official US Federal Election Commission filings: candidates, committees, fundraising totals, itemized receipts (schedule_a), disbursements (schedule_b), independent expenditures (schedule_e).
+- query_gdelt_news — global news monitoring: articles (artlist), coverage-volume timelines (timelinevol), sentiment (tonechart).
+- query_wiki_attention — daily Wikipedia pageviews as a public-attention proxy. Dates are YYYYMMDD.
+
+Combine suites for political intelligence briefs: paid reach (Ad Library) + money (FEC) + earned media (GDELT) + public attention (Wikipedia).
+
+## POLITICAL DATA INTEGRITY — CRITICAL
+- Meta Ad Library spend and impressions are RANGES by design (lower_bound/upper_bound). Always present them as ranges, and sum ranges as ranges (low-high). Never invent exact figures or midpoints.
+- FEC numbers are official filings; mention the election cycle and note that recent activity may not be filed yet.
+- GDELT measures MEDIA COVERAGE volume and tone — it is not public opinion polling. Label it as media coverage.
+- Wikipedia pageviews measure attention, not sentiment or support.
+- Attribute every number to its source (Meta Ad Library, FEC, GDELT, Wikipedia Pageviews). Stay strictly neutral: report what the data shows for all sides, never advocate a political position.
 
 For LinkedIn specifically: pivot determines the breakdown level (CAMPAIGN, CREATIVE, demographics). Computed fields _ctr, _cpm, _cpc, _cpa are added automatically. Demographic pivots (MEMBER_JOB_FUNCTION etc.) have 12-24hr data delay. Lead gen metric: leadGenerationMailContactInfoShares.
 
@@ -2014,6 +2201,30 @@ async function ask(userMsg){
               }catch(_){rowInfo=`${(r.data.length/1024).toFixed(1)}kb`}
               card.ok(rowInfo);
             }
+          } else if(t.name==='query_meta_ad_library'){
+            const inp=t.input;
+            status.phase('searching','Meta Ad Library');
+            const card=appendToolCard('adlib',inp.description||'Political ad search',(inp.searchTerms?'\u201c'+inp.searchTerms+'\u201d \u00b7 ':'')+((inp.countries||['US']).join(',')));
+            r=await politQuery('meta_ad_library',inp);
+            if(r.error){card.err('Failed')}else{card.ok(politRows(r))}
+          } else if(t.name==='query_fec'){
+            const inp=t.input;
+            status.phase('searching','FEC');
+            const card=appendToolCard('fec',inp.description||'Campaign finance lookup',inp.endpoint||'');
+            r=await politQuery('fec',inp);
+            if(r.error){card.err('Failed')}else{card.ok(politRows(r))}
+          } else if(t.name==='query_gdelt_news'){
+            const inp=t.input;
+            status.phase('searching','GDELT News');
+            const card=appendToolCard('news',inp.description||'News monitoring',(inp.mode||'artlist')+' \u00b7 '+String(inp.query||'').slice(0,60));
+            r=await politQuery('gdelt_news',inp);
+            if(r.error){card.err('Failed')}else{card.ok(politRows(r))}
+          } else if(t.name==='query_wiki_attention'){
+            const inp=t.input;
+            status.phase('searching','Wikipedia');
+            const card=appendToolCard('wiki',inp.description||'Attention trend',(inp.article||'')+' \u00b7 '+(inp.start||'')+'\u2013'+(inp.end||''));
+            r=await politQuery('wiki_trends',inp);
+            if(r.error){card.err('Failed')}else{card.ok(politRows(r))}
           }
           }catch(err){ r={error:'Tool execution error: '+(err&&err.message||err)}; }
           if(!r)r={error:`Tool "${t.name}" is not supported`};
@@ -2044,6 +2255,7 @@ function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMs
 function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,160)+'px'}
 function sendMsg(){const inp=document.getElementById('msg-inp');const msg=inp.value.trim();if(!msg||busy)return;inp.value='';inp.style.height='auto';appendMsg('user',msg);ask(msg)}
 function sendChip(el){appendMsg('user',el.textContent);ask(el.textContent)}
+function sendPrompt(el){var q=el.getAttribute('data-q')||el.textContent;appendMsg('user',q);ask(q)}
 
 function openSettings(){closeSidebar();
   loadCfg();
@@ -2520,6 +2732,7 @@ function showApp(){
   if(ma) ma.style.display = 'flex';
   if(window.LoginCinema) LoginCinema.stop();
   loadCfg(); loadConvos(); renderSb();
+  if(document.getElementById('welcome')){var _mw=getMwrap();if(_mw)_mw.innerHTML=welcomeHTML();}
   updateSidebarUser();
   autoLoadMetaAccounts();
   if(!cfg.wurl) setTimeout(function(){ openMod('m-setup'); }, 600);

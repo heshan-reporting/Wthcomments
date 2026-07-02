@@ -7,6 +7,10 @@
  *   meta_accounts   {}                    <-- the fix for "Unknown source"
  *   tiktok_ads      { path?, advertiserId?, ... }   (optional)
  *   linkedin_ads    { ... }                          (optional stub)
+ *   meta_ad_library { searchTerms?, countries?, ... }   political & issue ads (public)
+ *   fec             { endpoint, params? }               US campaign finance (official)
+ *   gdelt_news      { query, mode?, timespan? }         global news monitoring (free)
+ *   wiki_trends     { article, start, end }             Wikipedia attention (free)
  *
  * Secrets (Worker → Settings → Variables):
  *   AUTH_SECRET                  – must match the app's "Worker Auth Token"
@@ -17,6 +21,7 @@
  *   GOOGLE_ADS_CLIENT_SECRET
  *   GOOGLE_ADS_REFRESH_TOKEN
  *   (optional) TIKTOK_ACCESS_TOKEN, TIKTOK_ADVERTISER_ID, LINKEDIN_ACCESS_TOKEN
+ *   (optional) FEC_API_KEY       – free key from api.data.gov; falls back to DEMO_KEY
  * ------------------------------------------------------------------
  */
 
@@ -62,6 +67,10 @@ export default {
       if (source === 'meta_accounts') return await metaAccounts(env);
       if (source === 'tiktok_ads')    return await tiktokAds(body, env);
       if (source === 'linkedin_ads')  return await linkedinAds(body, env);
+      if (source === 'meta_ad_library') return await metaAdLibrary(body, env);
+      if (source === 'fec')             return await fecApi(body, env);
+      if (source === 'gdelt_news')      return await gdeltNews(body);
+      if (source === 'wiki_trends')     return await wikiTrends(body);
       return json({ error: 'Unknown source: ' + source }, 400);
     } catch (e) {
       return json({ error: String((e && e.message) || e) }, 200);
@@ -292,4 +301,111 @@ async function linkedinAds(body, env) {
   if (!token) return json({ error: 'LinkedIn not configured (set LINKEDIN_ACCESS_TOKEN)' });
   // Fill in your exact LinkedIn Marketing API call here if you use it.
   return json({ error: 'LinkedIn handler not implemented — send me your query shape to complete it.' });
+}
+
+/* ── META AD LIBRARY: public political & social-issue ads ──────────── */
+async function metaAdLibrary(body, env) {
+  const token = env.META_ACCESS_TOKEN;
+  if (!token) return json({ error: 'META_ACCESS_TOKEN secret is not set' });
+
+  const q = new URLSearchParams();
+  q.set('ad_type', body.adType || 'POLITICAL_AND_ISSUE_ADS');
+  q.set('ad_reached_countries', JSON.stringify(body.countries || ['US']));
+  q.set('ad_active_status', body.activeStatus || 'ALL');
+  if (body.searchTerms) q.set('search_terms', body.searchTerms);
+  if (body.pageIds) q.set('search_page_ids', JSON.stringify(body.pageIds));
+  if (body.since) q.set('ad_delivery_date_min', body.since);
+  if (body.until) q.set('ad_delivery_date_max', body.until);
+  q.set('fields', body.fields || [
+    'id', 'page_id', 'page_name', 'bylines', 'ad_creation_time',
+    'ad_delivery_start_time', 'ad_delivery_stop_time', 'ad_creative_bodies',
+    'ad_creative_link_titles', 'currency', 'spend', 'impressions',
+    'demographic_distribution', 'delivery_by_region', 'publisher_platforms',
+  ].join(','));
+  q.set('limit', String(Math.min(Number(body.limit) || 25, 100)));
+  q.set('access_token', token);
+
+  const d = await (await fetch(`https://graph.facebook.com/${META_V}/ads_archive?` + q)).json();
+  if (d.error) return json({ error: 'Meta Ad Library: ' + (d.error.message || 'Graph error') });
+
+  // trim heavy creative/breakdown payloads so responses stay context-friendly
+  const rows = (d.data || []).map((a) => {
+    if (a.ad_creative_bodies) a.ad_creative_bodies = a.ad_creative_bodies.slice(0, 2).map((t) => String(t).slice(0, 300));
+    if (a.demographic_distribution) a.demographic_distribution = a.demographic_distribution.slice(0, 24);
+    if (a.delivery_by_region) a.delivery_by_region = a.delivery_by_region.slice(0, 15);
+    return a;
+  });
+  return json({ data: rows, total: rows.length, truncated: !!(d.paging && d.paging.next) });
+}
+
+/* ── FEC: official US campaign-finance API (api.open.fec.gov) ──────── */
+const FEC_ALLOWED = ['/candidates', '/candidate/', '/committees', '/committee/', '/schedules/', '/elections', '/filings', '/totals/', '/names/'];
+async function fecApi(body, env) {
+  let ep = String(body.endpoint || '');
+  if (ep[0] !== '/') ep = '/' + ep;
+  if (!FEC_ALLOWED.some((p) => ep.startsWith(p))) return json({ error: 'FEC endpoint not allowed: ' + ep });
+  if (!ep.endsWith('/')) ep += '/';
+
+  const q = new URLSearchParams();
+  const params = body.params || {};
+  for (const k in params) {
+    const v = params[k];
+    if (v === undefined || v === null || v === '') continue;
+    if (Array.isArray(v)) v.forEach((x) => q.append(k, x));
+    else q.set(k, String(v));
+  }
+  if (!q.get('per_page') || Number(q.get('per_page')) > 50) q.set('per_page', q.get('per_page') ? '50' : '20');
+  q.set('api_key', env.FEC_API_KEY || 'DEMO_KEY');
+
+  const r = await fetch('https://api.open.fec.gov/v1' + ep + '?' + q);
+  const d = await r.json();
+  if (!r.ok) return json({ error: 'FEC ' + r.status + ': ' + JSON.stringify(d).slice(0, 300) });
+  return json({ data: d.results || d, total: (d.results || []).length, pagination: d.pagination });
+}
+
+/* ── GDELT: global news monitoring (free, no key) ──────────────────── */
+async function gdeltNews(body) {
+  const mode = body.mode || 'artlist';
+  const q = new URLSearchParams({
+    query: String(body.query || ''),
+    mode,
+    format: 'json',
+    timespan: body.timespan || '7d',
+  });
+  if (mode === 'artlist') {
+    q.set('maxrecords', String(Math.min(Number(body.maxrecords) || 25, 75)));
+    q.set('sort', body.sort || 'hybridrel');
+  }
+  const r = await fetch('https://api.gdeltproject.org/api/v2/doc/doc?' + q, {
+    headers: { 'User-Agent': 'CMM-Ads-Intelligence/1.0' },
+  });
+  const text = await r.text();
+  let d;
+  try { d = JSON.parse(text); } catch (_) { return json({ error: 'GDELT: ' + text.slice(0, 200) }); }
+  if (mode === 'artlist') {
+    const arts = (d.articles || []).map((a) => ({
+      title: a.title, url: a.url, domain: a.domain,
+      date: a.seendate, country: a.sourcecountry, lang: a.language,
+    }));
+    return json({ data: arts, total: arts.length });
+  }
+  return json({ data: d.timeline || d, total: (d.timeline && d.timeline.length) || 0 });
+}
+
+/* ── WIKIPEDIA: pageview attention trends (free, no key) ───────────── */
+async function wikiTrends(body) {
+  const art = encodeURIComponent(String(body.article || '').replace(/ /g, '_'));
+  const proj = body.project || 'en.wikipedia';
+  const start = String(body.start || '').replace(/-/g, '');
+  const end = String(body.end || '').replace(/-/g, '');
+  if (!art || !start || !end) return json({ error: 'article, start (YYYYMMDD) and end (YYYYMMDD) are required' });
+
+  const url = `https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/${proj}/all-access/all-agents/${art}/daily/${start}/${end}`;
+  const r = await fetch(url, { headers: { 'User-Agent': 'CMM-Ads-Intelligence/1.0' } });
+  const d = await r.json();
+  if (!r.ok || (d.type && /errors/.test(String(d.type)))) {
+    return json({ error: 'Wikimedia: ' + (d.title || 'article not found') + ' — check the exact Wikipedia article title' });
+  }
+  const rows = (d.items || []).map((i) => ({ date: i.timestamp.slice(0, 8), views: i.views }));
+  return json({ data: rows, total: rows.length, article: body.article });
 }
