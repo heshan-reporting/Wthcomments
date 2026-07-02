@@ -2,6 +2,8 @@
   "name": "CMM Ads Intelligence",
   "short_name": "CMM AI",
   "description": "AI-powered advertising analytics by Curious Minds Media",
+  "id": "./index.html",
+  "scope": "./",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0a0520",
