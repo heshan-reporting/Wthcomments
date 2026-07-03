@@ -855,6 +855,14 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 .ap-state .ap-refresh{display:inline-flex;margin-top:14px}
 @media(max-width:700px){.ap-list{max-height:62vh}.ap-search{font-size:16px}}
 
+/* ── LOGIN VIDEO: always-alive playback ───────────────────────────────────── */
+#lxVideo{pointer-events:none;transition:opacity .45s ease}
+/* never show the native ▶ overlay (iOS paints it on paused/blocked inline video) */
+#lxVideo::-webkit-media-controls,
+#lxVideo::-webkit-media-controls-start-playback-button{display:none!important;-webkit-appearance:none;opacity:0}
+/* brief dip-to-dark that masks the loop restart so it reads as a breath, not a cut */
+#lxVideo.lx-dip{opacity:.22}
+
 /* ── PWA INSTALL (Add to Home Screen) ─────────────────────────────────────── */
 #btn-install{display:none}
 #btn-install.avail{display:flex}
@@ -3520,13 +3528,14 @@ var LoginCinema=(function(){
     lastTS=ts;
     var target;
     var nativePlay=!framesReady&&!reduce&&video.duration&&isFinite(video.duration);
+    // while the real video is the backdrop it must NEVER pause — a paused
+    // inline video gets iOS's ▶ overlay and looks dead
+    if(nativePlay&&video.paused)video.play().catch(function(){});
     if(scroller.scrollTop>4){
-      if(nativePlay&&!video.paused)video.pause();
       target=progress();
       ambient=target;dragP=0;
     }else if(nativePlay){
       // frames not extracted yet — just let the video PLAY: instant auto-bloom
-      if(video.paused)video.play().catch(function(){});
       ambient=video.duration?video.currentTime/video.duration:0;
       target=ambient;
     }else{
@@ -3569,8 +3578,22 @@ var LoginCinema=(function(){
     video.addEventListener('seeked',function(){seeking=false;});
     video.addEventListener('stalled',function(){seeking=false;});
     video.addEventListener('loadeddata',function(){if(video.paused)video.currentTime=0;});
+    // soften the native loop restart: dip toward the dark overlay just before
+    // the end and fade back in right after the wrap — a breath, not a cut
+    video.addEventListener('timeupdate',function(){
+      if(framesReady||!video.duration||!isFinite(video.duration))return;
+      if(video.duration-video.currentTime<0.5)video.classList.add('lx-dip');
+      else if(video.currentTime<1)video.classList.remove('lx-dip');
+    });
     // interactivity: drag horizontally to scrub the bloom, pointer moves parallax it
-    scroller.addEventListener('pointerdown',function(e){dragging=true;dragX=e.clientX;},{passive:true});
+    scroller.addEventListener('pointerdown',function(e){
+      dragging=true;dragX=e.clientX;
+      // Low Power Mode / data-saver can block autoplay — first touch revives it
+      if(!framesReady&&!reduce&&video.paused)video.play().catch(function(){});
+    },{passive:true});
+    document.addEventListener('visibilitychange',function(){
+      if(!document.hidden&&running&&!framesReady&&!reduce&&video.paused)video.play().catch(function(){});
+    });
     scroller.addEventListener('pointermove',function(e){
       pxT=e.clientX/innerWidth-0.5;pyT=e.clientY/innerHeight-0.5;
       if(dragging){
