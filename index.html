@@ -3437,13 +3437,6 @@ var LoginCinema=(function(){
       URL.revokeObjectURL(objectUrl);
     }catch(e){/* fall back to seeking the streamed video element */}
   }
-  function progress(){
-    var vh=scroller.clientHeight;
-    var start=vh*0.5,end=scroller.scrollHeight-vh;
-    var range=end-start;
-    if(range<=0)return 0;
-    return Math.max(0,Math.min(1,(scroller.scrollTop-start)/range));
-  }
   function drawFrame(f){
     var cw=canvas.width,ch=canvas.height,s=Math.max(cw/f.width,ch/f.height);
     var dw=f.width*s,dh=f.height*s;
@@ -3519,8 +3512,10 @@ var LoginCinema=(function(){
   }
 
   // ── main loop / lifecycle ──────────────────────────────────────────────
-  // At the top of the page the bloom advances on its own (ping-pong) and can
-  // be scrubbed by dragging; once the user scrolls, scroll position takes over.
+  // The bloom is ALWAYS alive: it follows native playback while the video
+  // plays, and ping-pongs on its own otherwise (drag still scrubs it).
+  // Scroll never locks it to a position — that froze the flower at frame 0
+  // during early scroll. Hero fade + card reveals stay scroll-driven (uiTick).
   function loop(ts){
     if(!running)return;
     raf=requestAnimationFrame(loop);
@@ -3531,14 +3526,13 @@ var LoginCinema=(function(){
     // while the real video is the backdrop it must NEVER pause — a paused
     // inline video gets iOS's ▶ overlay and looks dead
     if(nativePlay&&video.paused)video.play().catch(function(){});
-    if(scroller.scrollTop>4){
-      target=progress();
-      ambient=target;dragP=0;
-    }else if(nativePlay){
-      // frames not extracted yet — just let the video PLAY: instant auto-bloom
-      ambient=video.duration?video.currentTime/video.duration:0;
+    if(nativePlay&&!video.paused){
+      // video is playing natively — mirror it
+      ambient=video.currentTime/video.duration;
       target=ambient;
     }else{
+      // canvas frames, reduced motion, or blocked autoplay: self-advancing
+      // ping-pong (seek-painted onto the paused video if frames never came)
       if(!reduce){
         ambient+=ambientDir*dt*0.07;
         if(ambient>=1){ambient=1;ambientDir=-1;}
