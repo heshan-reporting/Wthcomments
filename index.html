@@ -644,6 +644,19 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 .globe-mode-focus .globe-canvas{
   filter:drop-shadow(0 0 40px rgba(0,229,255,.45)) drop-shadow(0 0 100px rgba(139,92,246,.38))}
 
+/* PWA install chip */
+#pwa-install-chip{position:fixed;right:14px;bottom:92px;z-index:260;display:flex;align-items:center;gap:2px;
+  background:rgba(10,10,24,.88);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border:1px solid rgba(255,255,255,.16);border-radius:999px;padding:4px 6px 4px 4px;
+  box-shadow:0 10px 34px rgba(0,0,0,.5);animation:chipIn .5s cubic-bezier(.2,.8,.3,1) both}
+@keyframes chipIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.pwa-chip-btn{background:transparent;border:none;color:#eaf6ff;font-family:inherit;font-size:12.5px;
+  padding:7px 10px;cursor:pointer;white-space:nowrap}
+.pwa-chip-btn strong{color:#7db8e8}
+.pwa-chip-x{background:transparent;border:none;color:rgba(255,255,255,.55);font-size:16px;line-height:1;
+  padding:6px 8px;cursor:pointer;border-radius:50%}
+.pwa-chip-x:hover{color:#fff}
+
 /* AI answers reveal block-by-block, in step with the globe's pulses */
 @keyframes blockIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 .msg.ai .mbubble.reveal>*{opacity:0;animation:blockIn .5s cubic-bezier(.2,.7,.3,1) forwards}
@@ -910,11 +923,11 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
     <section class="lxv-hero" id="lxvHero">
       <div class="lxv-hero-grad"></div>
       <div class="lxv-hero-inner">
-        <p class="lxv-subtitle">Our Purpose:</p>
+        <p class="lxv-subtitle">CMM Ads Intelligence</p>
         <h1>
-          Explore ideas. Discover
-          <span class="lxv-underlined"><span class="lxv-line"></span><span>insights</span></span>,
-          connect with curiosity.
+          Grabs your social media ad data, analyses it, and hands you the
+          <span class="lxv-underlined"><span class="lxv-line"></span><span>answers</span></span>
+          that matter.
         </h1>
         <div class="lxv-ctas">
           <div class="g-wrap"><div id="google-signin-btn"></div></div>
@@ -3261,17 +3274,60 @@ function appendStatus() {
 }
 
 
-// ── Kill any stale cache-first service worker from a previous PWA build ──────
-//    (the old cmm-ai-v1 worker pinned index.html and showed stale pages)
+// ── PWA: register the service worker (network-first pages — never stale) ─────
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations()
-    .then(function(rs){ rs.forEach(function(r){ r.unregister(); }); })
-    .catch(function(){});
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  });
 }
-if (window.caches && caches.keys) {
-  caches.keys().then(function(ks){ ks.forEach(function(k){ caches.delete(k); }); })
-    .catch(function(){});
+
+// ── PWA: install experience ──────────────────────────────────────────────────
+// Android/Chrome fires beforeinstallprompt → show an Install chip that opens
+// the native prompt. iOS Safari has no prompt API → the chip explains
+// Share → Add to Home Screen. Hidden once installed or dismissed.
+var _bipEvt = null;
+function _isStandalone() {
+  return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
 }
+function _installChip() { return document.getElementById('pwa-install-chip'); }
+function showInstallChip() {
+  if (_isStandalone() || _installChip()) return;
+  try { if (localStorage.getItem('cmm_install_dismissed')) return; } catch (e) {}
+  var chip = document.createElement('div');
+  chip.id = 'pwa-install-chip';
+  chip.innerHTML = '<button class="pwa-chip-btn" id="pwa-chip-go">&#128241; Install app</button><button class="pwa-chip-x" id="pwa-chip-x" aria-label="Dismiss">&times;</button>';
+  document.body.appendChild(chip);
+  document.getElementById('pwa-chip-go').addEventListener('click', function () {
+    if (_bipEvt) {
+      _bipEvt.prompt();
+      _bipEvt.userChoice.then(function () { _bipEvt = null; hideInstallChip(); }).catch(function () {});
+    } else {
+      // iOS: no programmatic prompt — show the how-to once
+      var go = document.getElementById('pwa-chip-go');
+      go.innerHTML = 'Tap <strong>Share</strong> &rarr; <strong>Add to Home Screen</strong>';
+    }
+  });
+  document.getElementById('pwa-chip-x').addEventListener('click', function () {
+    try { localStorage.setItem('cmm_install_dismissed', '1'); } catch (e) {}
+    hideInstallChip();
+  });
+}
+function hideInstallChip() { var c = _installChip(); if (c) c.remove(); }
+window.addEventListener('beforeinstallprompt', function (e) {
+  e.preventDefault();
+  _bipEvt = e;
+  showInstallChip();
+});
+window.addEventListener('appinstalled', function () { _bipEvt = null; hideInstallChip(); });
+// iOS Safari never fires beforeinstallprompt — offer the chip there too
+(function () {
+  var ua = navigator.userAgent || '';
+  var isIOS = /iPhone|iPad|iPod/.test(ua) && !window.MSStream;
+  if (isIOS && !_isStandalone()) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', showInstallChip);
+    else showInstallChip();
+  }
+})();
 
 /* Veldara-style login: scroll-scrubbed video + particles + card reveal.
    The login screen is its own scroll container, so all progress math uses
