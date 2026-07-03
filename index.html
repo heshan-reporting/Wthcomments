@@ -887,7 +887,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
   <!-- Scroll Video Background -->
   <div class="lxv-video" aria-hidden="true">
     <canvas id="lxvCanvas"></canvas>
-    <video id="lxVideo" muted playsinline preload="metadata"
+    <video id="lxVideo" muted playsinline autoplay loop preload="auto"
       src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260616_212935_bbf608da-62d1-4f25-9be4-c346e4d09cc8.mp4"></video>
     <div class="lxv-overlay"></div>
   </div>
@@ -3406,9 +3406,22 @@ var LoginCinema=(function(){
           v.addEventListener('seeked',on);
           setTimeout(function(){v.removeEventListener('seeked',on);rej();},3000);
         });
-        frames.push(await createImageBitmap(v,{resizeWidth:sw,resizeHeight:sh}));
+        try{
+          frames.push(await createImageBitmap(v,{resizeWidth:sw,resizeHeight:sh}));
+        }catch(e2){
+          // Safari has no resize options on createImageBitmap — go via a canvas
+          var fc=document.createElement('canvas');fc.width=sw;fc.height=sh;
+          fc.getContext('2d').drawImage(v,0,0,sw,sh);
+          frames.push(fc);
+        }
       }
       if(frames.length){
+        // hand off from the auto-playing video to the canvas without a jump
+        if(video.duration&&isFinite(video.duration)&&video.duration>0){
+          ambient=Math.max(0,Math.min(1,video.currentTime/video.duration));
+          cur=ambient;ambientDir=1;
+        }
+        video.pause();
         framesReady=true;
         canvas.style.visibility='visible';
         video.style.display='none';
@@ -3432,7 +3445,8 @@ var LoginCinema=(function(){
     if(framesReady&&frames.length){
       var idx=Math.round(p*(frames.length-1));
       if(idx!==lastFrame){lastFrame=idx;if(frames[idx])drawFrame(frames[idx]);}
-    }else if(video.duration&&isFinite(video.duration)&&video.readyState>=1){
+    }else if(video.paused&&video.duration&&isFinite(video.duration)&&video.readyState>=1){
+      // only seek-scrub while paused — never fight native playback
       var t=p*video.duration;
       if(!seeking&&Math.abs(video.currentTime-t)>0.001){seeking=true;video.currentTime=t;}
     }
@@ -3505,9 +3519,16 @@ var LoginCinema=(function(){
     var dt=lastTS?Math.min(0.05,(ts-lastTS)/1000):0.016;
     lastTS=ts;
     var target;
+    var nativePlay=!framesReady&&!reduce&&video.duration&&isFinite(video.duration);
     if(scroller.scrollTop>4){
+      if(nativePlay&&!video.paused)video.pause();
       target=progress();
       ambient=target;dragP=0;
+    }else if(nativePlay){
+      // frames not extracted yet — just let the video PLAY: instant auto-bloom
+      if(video.paused)video.play().catch(function(){});
+      ambient=video.duration?video.currentTime/video.duration:0;
+      target=ambient;
     }else{
       if(!reduce){
         ambient+=ambientDir*dt*0.07;
@@ -3547,7 +3568,7 @@ var LoginCinema=(function(){
     canvas.style.visibility='hidden';
     video.addEventListener('seeked',function(){seeking=false;});
     video.addEventListener('stalled',function(){seeking=false;});
-    video.addEventListener('loadeddata',function(){video.currentTime=0;});
+    video.addEventListener('loadeddata',function(){if(video.paused)video.currentTime=0;});
     // interactivity: drag horizontally to scrub the bloom, pointer moves parallax it
     scroller.addEventListener('pointerdown',function(e){dragging=true;dragX=e.clientX;},{passive:true});
     scroller.addEventListener('pointermove',function(e){
@@ -3582,6 +3603,8 @@ var LoginCinema=(function(){
     lastTS=0;
     scroller.scrollTop=0;
     video.preload='auto'; // login is visible now — let the fallback paint frames early
+    if(reduce){video.pause();}
+    else{video.play().catch(function(){});} // bloom immediately, before frames extract
     resizeCanvas();
     if(!reduce&&pCtx)resizeParticles();
     extractFrames();
@@ -3590,6 +3613,9 @@ var LoginCinema=(function(){
   function stop(){
     running=false;
     if(raf){cancelAnimationFrame(raf);raf=null;}
+    // don't leave the (autoplay) video running behind the app
+    var v=video||document.getElementById('lxVideo');
+    if(v)v.pause();
   }
   return{start:start,stop:stop};
 })();
