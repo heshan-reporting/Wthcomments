@@ -854,6 +854,25 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 @keyframes apspin{to{transform:rotate(360deg)}}
 .ap-state .ap-refresh{display:inline-flex;margin-top:14px}
 @media(max-width:700px){.ap-list{max-height:62vh}.ap-search{font-size:16px}}
+
+/* ── PWA INSTALL (Add to Home Screen) ─────────────────────────────────────── */
+#btn-install{display:none}
+#btn-install.avail{display:flex}
+.a2hs-banner{position:fixed;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:400;
+  display:none;align-items:flex-start;gap:12px;padding:14px 16px;border-radius:14px;
+  background:rgba(12,15,30,.92);border:1px solid var(--border-hv);backdrop-filter:blur(18px);
+  box-shadow:0 12px 40px rgba(0,0,0,.55);animation:msgIn .3s ease;max-width:420px;margin:0 auto}
+.a2hs-banner.show{display:flex}
+.a2hs-icon{width:38px;height:38px;border-radius:9px;flex-shrink:0;background:var(--grad);
+  display:flex;align-items:center;justify-content:center;color:#04060f}
+.a2hs-icon svg{width:20px;height:20px}
+.a2hs-txt{font-size:13px;line-height:1.55;color:var(--text)}
+.a2hs-txt b{font-weight:600}
+.a2hs-txt .a2hs-sub{color:var(--text-2);font-size:12px;margin-top:2px}
+.a2hs-txt svg{width:13px;height:13px;vertical-align:-2px;color:var(--cyan)}
+.a2hs-close{margin-left:auto;flex-shrink:0;width:26px;height:26px;border:none;border-radius:7px;
+  background:var(--glass-md);color:var(--text-2);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.a2hs-close svg{width:14px;height:14px}
 </style>
 </head>
 <body>
@@ -880,16 +899,16 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
   <div class="lxv-cards" id="lxvCards">
     <div class="lxv-grid" id="lxvGrid">
       <div class="lxv-card">
-        <h3>Explore your ads</h3>
-        <p>Every Meta campaign, ad set, and creative in one place — performance surfaced the moment you sign in, across all of your ad accounts.</p>
+        <h3>Grab your ad data</h3>
+        <p>Pulls live data straight from your social media ad accounts — Meta, Google, TikTok and LinkedIn — every campaign, ad set and creative in one place the moment you sign in.</p>
       </div>
       <div class="lxv-card">
-        <h3>Ask anything</h3>
+        <h3>Analyse with AI</h3>
         <p>Chat with an AI analyst that knows your spend, reach, and results. Plain-English questions, instant answers backed by your live data.</p>
       </div>
       <div class="lxv-card">
-        <h3>Report instantly</h3>
-        <p>Turn raw metrics into clear tables and takeaways you can share — built for quick decisions on any device, from desktop to phone.</p>
+        <h3>Get the info you need</h3>
+        <p>Turns raw metrics into clear tables, takeaways and reports you can share with your team — built for quick decisions on any device.</p>
       </div>
     </div>
   </div>
@@ -910,11 +929,11 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
     <section class="lxv-hero" id="lxvHero">
       <div class="lxv-hero-grad"></div>
       <div class="lxv-hero-inner">
-        <p class="lxv-subtitle">Our Purpose:</p>
+        <p class="lxv-subtitle">CMM Ads Intelligence</p>
         <h1>
-          Explore ideas. Discover
+          Your social media ads, analysed. Live data, clear
           <span class="lxv-underlined"><span class="lxv-line"></span><span>insights</span></span>,
-          connect with curiosity.
+          instant reports.
         </h1>
         <div class="lxv-ctas">
           <div class="g-wrap"><div id="google-signin-btn"></div></div>
@@ -991,6 +1010,10 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
     <button class="sb-sbtn" onclick="openSettings()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
       Configuration
+    </button>
+    <button class="sb-sbtn" id="btn-install" onclick="installApp()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Install app
     </button>
   </div>
 </aside>
@@ -1100,6 +1123,20 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 </main>
 </div><!-- end .app -->
 </div><!-- end #main-app -->
+
+<!-- iOS "Add to Home Screen" hint (Safari has no install prompt API) -->
+<div class="a2hs-banner" id="a2hs-banner" role="status">
+  <div class="a2hs-icon">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18.01"/></svg>
+  </div>
+  <div class="a2hs-txt">
+    <b>Install CMM AI on your phone</b>
+    <div class="a2hs-sub">Tap <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v7a2 2 0 002 2h12a2 2 0 002-2v-7"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> Share, then &ldquo;Add to Home&nbsp;Screen&rdquo; to use it as an app.</div>
+  </div>
+  <button class="a2hs-close" onclick="dismissA2hs()" aria-label="Dismiss">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  </button>
+</div>
 
 <!-- SETTINGS MODAL -->
 <div class="ov" id="m-acct">
@@ -2522,6 +2559,7 @@ function showApp(){
   loadCfg(); loadConvos(); renderSb();
   updateSidebarUser();
   autoLoadMetaAccounts();
+  maybeOfferInstall();
   if(!cfg.wurl) setTimeout(function(){ openMod('m-setup'); }, 600);
 }
 
@@ -3261,16 +3299,63 @@ function appendStatus() {
 }
 
 
-// ── Kill any stale cache-first service worker from a previous PWA build ──────
-//    (the old cmm-ai-v1 worker pinned index.html and showed stale pages)
+// ── PWA: installable mobile app ──────────────────────────────────────────────
+// Network-first service worker (offline shell + installability). It always
+// fetches fresh from the network, so it can't pin a stale index.html the way
+// the old cache-first cmm-ai-v1 worker did; its activate step also deletes
+// every leftover cache from that build.
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations()
-    .then(function(rs){ rs.forEach(function(r){ r.unregister(); }); })
-    .catch(function(){});
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+  });
 }
-if (window.caches && caches.keys) {
-  caches.keys().then(function(ks){ ks.forEach(function(k){ caches.delete(k); }); })
-    .catch(function(){});
+
+var IS_STANDALONE = (window.matchMedia && matchMedia('(display-mode: standalone)').matches)
+  || navigator.standalone === true;
+var IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+  || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+// Chromium: capture the native install prompt and expose it as a sidebar button.
+var deferredInstall = null;
+window.addEventListener('beforeinstallprompt', function (e) {
+  e.preventDefault();
+  deferredInstall = e;
+  if (!IS_STANDALONE) {
+    var b = document.getElementById('btn-install');
+    if (b) b.classList.add('avail');
+  }
+});
+function installApp() {
+  if (!deferredInstall) return;
+  deferredInstall.prompt();
+  deferredInstall.userChoice.then(function () {
+    deferredInstall = null;
+    var b = document.getElementById('btn-install');
+    if (b) b.classList.remove('avail');
+  }).catch(function(){});
+}
+window.addEventListener('appinstalled', function () {
+  deferredInstall = null;
+  var b = document.getElementById('btn-install');
+  if (b) b.classList.remove('avail');
+});
+
+// iOS Safari: no install prompt API — show a one-time "Add to Home Screen"
+// hint after sign-in (never over the login screen, never once installed).
+function maybeOfferInstall() {
+  if (IS_STANDALONE || !IS_IOS) return;
+  var seen = false;
+  try { seen = localStorage.getItem('cmm_a2hs_seen') === '1'; } catch (e) {}
+  if (seen) return;
+  setTimeout(function () {
+    var el = document.getElementById('a2hs-banner');
+    if (el) el.classList.add('show');
+  }, 4000);
+}
+function dismissA2hs() {
+  var el = document.getElementById('a2hs-banner');
+  if (el) el.classList.remove('show');
+  try { localStorage.setItem('cmm_a2hs_seen', '1'); } catch (e) {}
 }
 
 /* Veldara-style login: scroll-scrubbed video + particles + card reveal.
