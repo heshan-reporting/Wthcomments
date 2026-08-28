@@ -309,6 +309,21 @@ table.ct{width:100%;border-collapse:collapse;font-size:12.5px;min-width:760px}
   border:1px solid var(--brd2);border-radius:12px;padding:10px 12px;margin-top:12px;overflow-x:auto;white-space:nowrap}
 
 
+
+/* ── ACCOUNTS / CLIENTS strip ─────────────────────────────────────────────── */
+.acc{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:11px;margin-bottom:14px}
+.acc-card{position:relative;height:112px;border-radius:18px;overflow:hidden;cursor:pointer;color:#fff;
+  border:1px solid rgba(255,255,255,.30);box-shadow:0 10px 26px rgba(40,28,16,.24);
+  display:flex;flex-direction:column;justify-content:flex-end;padding:12px 13px;
+  transition:transform .28s cubic-bezier(.32,.72,.32,1),box-shadow .28s}
+.acc-card:hover{transform:translateY(-4px);box-shadow:0 20px 44px rgba(30,20,10,.36)}
+.acc-card .art{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
+.acc-card>*:not(.art){position:relative;z-index:1;text-shadow:0 1px 10px rgba(0,0,0,.6)}
+.acc-card .an{font-size:12.5px;font-weight:600}
+.acc-card .av{font-size:17px;font-weight:700;letter-spacing:-.4px;margin-top:1px}
+.acc-card .am{font-size:10px;color:rgba(255,255,255,.72);font-family:var(--fmono);margin-top:1px}
+.acc-card.on{outline:2px solid rgba(255,255,255,.7);outline-offset:-2px}
+
 /* ── COVERFLOW SPOTLIGHT (ref: card carousel video) ───────────────────────── */
 .cf{position:relative;margin-bottom:14px;border-radius:24px;overflow:hidden;
   background:var(--panel);border:1px solid var(--brd2);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
@@ -323,23 +338,25 @@ table.ct{width:100%;border-collapse:collapse;font-size:12.5px;min-width:760px}
 .cf-glow{position:absolute;inset:-30% -10% -40%;z-index:0;pointer-events:none;opacity:.72;
   background:radial-gradient(60% 60% at 50% 45%,var(--glow,#a78bfa) 0%,transparent 70%);
   filter:blur(52px);transition:background .85s ease,opacity .85s ease}
-.cf-stage{position:relative;height:268px;perspective:1500px;z-index:2;touch-action:pan-y;cursor:grab}
+.cf-stage{position:relative;height:330px;perspective:1500px;z-index:2;touch-action:pan-y;cursor:grab}
 .cf-stage:active{cursor:grabbing}
-@media(max-width:560px){.cf-stage{height:246px}}
-.cf-card{position:absolute;left:50%;top:50%;width:216px;height:212px;margin:-106px 0 0 -108px;
-  border-radius:22px;padding:15px 16px;overflow:hidden;transform-style:preserve-3d;
-  border:1px solid rgba(255,255,255,.42);background:var(--cardbg,rgba(255,255,255,.30));
-  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+@media(max-width:560px){.cf-stage{height:306px}}
+.cf-card{position:absolute;left:50%;top:50%;width:208px;height:274px;margin:-137px 0 0 -104px;
+  border-radius:22px;padding:14px 15px;overflow:hidden;transform-style:preserve-3d;
+  border:1px solid rgba(255,255,255,.34);background:#15100b;
   box-shadow:0 18px 46px rgba(40,28,16,.30);will-change:transform,opacity;
-  display:flex;flex-direction:column;gap:6px}
+  display:flex;flex-direction:column;gap:5px;color:#fff}
+.cf-card .art{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none}
+.cf-card>*:not(.art){position:relative;z-index:1}
+.cf-card .cf-nm,.cf-card .cf-spend{text-shadow:0 1px 12px rgba(0,0,0,.55)}
 body.motion .cf-card{transition:transform .72s cubic-bezier(.32,.72,.32,1),opacity .72s ease,filter .72s ease,box-shadow .4s}
 .cf-card.on{cursor:pointer;box-shadow:0 26px 64px rgba(30,20,10,.42)}
 .cf-card .cf-top{display:flex;align-items:center;gap:7px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
 .cf-card .cf-top .pdot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.cf-card .cf-nm{font-size:14px;font-weight:600;line-height:1.35;margin-top:1px;
+.cf-card .cf-nm{font-size:14.5px;font-weight:600;line-height:1.35;margin-top:1px;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .cf-card .cf-spend{font-size:26px;font-weight:700;letter-spacing:-.8px;margin-top:auto}
-.cf-card .cf-sub{font-size:10.5px;color:var(--tx2);font-family:var(--fmono)}
+.cf-card .cf-sub{font-size:10.5px;color:rgba(255,255,255,.72);font-family:var(--fmono)}
 .cf-card .cf-ring{position:absolute;right:13px;top:13px}
 .cf-card .cf-ring text{font-family:var(--fm);font-weight:700}
 .cf-dots{display:flex;gap:5px;justify-content:center;padding:2px 0 14px;position:relative;z-index:3}
@@ -473,6 +490,7 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,tr
       </section>
 
 
+      <section class="acc anim" style="--i:1.6" id="accStrip"></section>
       <section class="cf anim" style="--i:2" id="cfSec">
         <div class="cf-glow" id="cfGlow"></div>
         <div class="cf-head">
@@ -1014,6 +1032,7 @@ function render(){
     const d=document.createElement('div'); d.className='err-note';
     d.textContent=PLATFORMS[p].label+': '+msg; pe.appendChild(d); });
 
+  accRender();
   cfRender();
 
   /* donut + legend */
@@ -1093,6 +1112,144 @@ function renderSideCamps(){
 }
 
 
+
+/* ═════════════════════ generated poster artwork ═════════════════════
+   Deterministic SVG key-art per campaign/account: same name always
+   yields the same poster, colour-keyed to its platform and varied by a
+   theme keyword in the name. Ships with the page — no external images,
+   no network. Drop-in real artwork overrides it (see ART_OVERRIDES). */
+const ART_OVERRIDES={};           /* e.g. {'AEP Awareness AU':'art/theme-awareness.jpg'} */
+const ART_THEMES=[
+  {k:['awareness','reach','prospecting','thought leadership'],m:'rings'},
+  {k:['retarget','remarket','warm','rlsa'],m:'orbit'},
+  {k:['lead gen','leadgen','lead-gen','form','signup','abm','enterprise'],m:'funnel'},
+  {k:['shopping','pmax','performance max','retail','catalog'],m:'grid'},
+  {k:['video','ugc','spark','reels','story'],m:'streak'},
+  {k:['search','generic','keyword','non-brand','brand'],m:'beam'},
+];
+function hash32(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}return h>>>0}
+function mulberry(a){return function(){a=(a+0x6D2B79F5)>>>0;let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return ((t^(t>>>14))>>>0)/4294967296}}
+function hexToHsl(h){h=h.replace('#','');const r=parseInt(h.slice(0,2),16)/255,g=parseInt(h.slice(2,4),16)/255,b=parseInt(h.slice(4,6),16)/255;
+  const mx=Math.max(r,g,b),mn=Math.min(r,g,b),l=(mx+mn)/2;let s=0,hh=0;
+  if(mx!==mn){const d=mx-mn;s=l>.5?d/(2-mx-mn):d/(mx+mn);
+    hh=mx===r?((g-b)/d+(g<b?6:0)):mx===g?((b-r)/d+2):((r-g)/d+4);hh*=60}
+  return [hh,s*100,l*100];}
+const hsl=(h,s,l,a)=>'hsla('+((h%360)+360)%360+','+Math.max(0,Math.min(100,s))+'%,'+Math.max(0,Math.min(100,l))+'%,'+(a==null?1:a)+')';
+
+function themeOf(name){
+  const n=String(name).toLowerCase();
+  /* word-boundary match so e.g. "Thought Leadership" is not read as lead-gen */
+  const has=(k)=>new RegExp('(^|[^a-z])'+k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'([^a-z]|$)').test(n);
+  for(const t of ART_THEMES)if(t.k.some(has))return t.m;
+  return ['rings','orbit','funnel','grid','streak','beam'][hash32(n)%6];
+}
+
+/* Builds one poster as an <svg>. w/h are the viewBox; the card scales it. */
+function posterArt(name,hex,motif){
+  const seed=hash32(name||'x'), rnd=mulberry(seed);
+  const [H,S,L]=hexToHsl(hex);
+  /* stay inside the platform's hue family so the art still reads as that platform */
+  const h2=H+(rnd()<.5?-1:1)*(12+rnd()*16), h3=H+(rnd()<.5?-1:1)*(22+rnd()*20);
+  const W=300,Ht=400, uid='a'+seed.toString(36);
+  const svg=document.createElementNS(svgNS,'svg');
+  svg.setAttribute('viewBox','0 0 '+W+' '+Ht);
+  svg.setAttribute('preserveAspectRatio','xMidYMid slice');
+  svg.setAttribute('aria-hidden','true');
+  svg.classList.add('art');
+  const defs=el('defs',{},svg);
+  /* deep base gradient */
+  const ang=rnd()*360;
+  const bg=el('linearGradient',{id:uid+'bg',gradientTransform:'rotate('+ang.toFixed(1)+' .5 .5)'},defs);
+  el('stop',{offset:'0%','stop-color':hsl(H,Math.min(92,S+16),Math.max(16,L-24))},bg);
+  el('stop',{offset:'58%','stop-color':hsl(h2,Math.min(88,S+6),Math.max(11,L-34))},bg);
+  el('stop',{offset:'100%','stop-color':hsl(h3,70,10)},bg);
+  el('rect',{x:0,y:0,width:W,height:Ht,fill:'url(#'+uid+'bg)'},svg);
+  /* soft light blooms */
+  const blur=el('filter',{id:uid+'b',x:'-40%',y:'-40%',width:'180%',height:'180%'},defs);
+  el('feGaussianBlur',{stdDeviation:26},blur);
+  const g1=el('g',{filter:'url(#'+uid+'b)',opacity:.85},svg);
+  for(let i=0;i<3;i++){
+    el('ellipse',{cx:(30+rnd()*240).toFixed(0),cy:(40+rnd()*300).toFixed(0),
+      rx:(60+rnd()*90).toFixed(0),ry:(50+rnd()*90).toFixed(0),
+      fill:hsl(i===0?H:i===1?h2:h3,92,i===0?62:52,.55)},g1);
+  }
+  /* motif — the graphic idea that differentiates each theme */
+  const ink=hsl(H,100,86,.85), ink2='rgba(255,255,255,.5)';
+  const g=el('g',{},svg);
+  if(motif==='rings'){
+    const cx=150,cy=178;
+    for(let i=0;i<5;i++)el('circle',{cx,cy,r:26+i*27,fill:'none',stroke:ink,'stroke-width':i===0?3:1.4,opacity:(.85-i*.14).toFixed(2)},g);
+  }else if(motif==='orbit'){
+    el('circle',{cx:150,cy:180,r:34,fill:hsl(H,100,72,.9)},g);
+    for(let i=0;i<3;i++)el('ellipse',{cx:150,cy:180,rx:66+i*34,ry:26+i*13,fill:'none',stroke:ink,'stroke-width':1.6,
+      opacity:(.8-i*.2).toFixed(2),transform:'rotate('+(-28+i*32)+' 150 180)'},g);
+  }else if(motif==='funnel'){
+    for(let i=0;i<6;i++){const w=190-i*28;
+      el('rect',{x:150-w/2,y:78+i*33,width:w,height:15,rx:7,fill:ink,opacity:(.28+i*.11).toFixed(2)},g);}
+  }else if(motif==='grid'){
+    for(let i=0;i<9;i++){const c=i%3,r=Math.floor(i/3);
+      el('rect',{x:58+c*66,y:110+r*66,width:48,height:48,rx:12,fill:'none',stroke:ink,'stroke-width':1.6,
+        opacity:(.35+rnd()*.6).toFixed(2)},g);}
+    el('rect',{x:58+(hash32(name)%3)*66,y:110+(hash32(name+'r')%3)*66,width:48,height:48,rx:12,fill:hsl(H,100,74,.85)},g);
+  }else if(motif==='streak'){
+    for(let i=0;i<7;i++)el('rect',{x:-40+i*52,y:-60,width:(9+rnd()*16).toFixed(0),height:560,rx:8,
+      fill:i%2?ink:hsl(h2,100,72,.7),opacity:(.22+rnd()*.5).toFixed(2),transform:'rotate(24 150 200)'},g);
+  }else{ /* beam */
+    el('path',{d:'M150 44 L214 356 L150 300 L86 356 Z',fill:hsl(H,100,74,.55)},g);
+    el('circle',{cx:150,cy:150,r:52,fill:'none',stroke:ink,'stroke-width':2.2},g);
+    el('circle',{cx:150,cy:150,r:14,fill:ink},g);
+  }
+  /* fine grain so it reads as artwork, not flat vector */
+  const gr=el('filter',{id:uid+'g'},defs);
+  el('feTurbulence',{type:'fractalNoise',baseFrequency:'.9',numOctaves:'2',stitchTiles:'stitch'},gr);
+  el('feColorMatrix',{type:'saturate',values:'0'},gr);
+  el('rect',{x:0,y:0,width:W,height:Ht,filter:'url(#'+uid+'g)',opacity:.14,style:'mix-blend-mode:overlay'},svg);
+  /* vignette + bottom scrim keep the card text legible */
+  const vg=el('radialGradient',{id:uid+'v',cx:'50%',cy:'42%',r:'72%'},defs);
+  el('stop',{offset:'55%','stop-color':'rgba(0,0,0,0)'},vg);
+  el('stop',{offset:'100%','stop-color':'rgba(0,0,0,.55)'},vg);
+  el('rect',{x:0,y:0,width:W,height:Ht,fill:'url(#'+uid+'v)'},svg);
+  const sc=el('linearGradient',{id:uid+'s',x1:'0',y1:'0',x2:'0',y2:'1'},defs);
+  el('stop',{offset:'40%','stop-color':'rgba(8,6,4,0)'},sc);
+  el('stop',{offset:'100%','stop-color':'rgba(8,6,4,.86)'},sc);
+  el('rect',{x:0,y:0,width:W,height:Ht,fill:'url(#'+uid+'s)'},svg);
+  return svg;
+}
+/* real artwork, when present, replaces the generated poster */
+function artNode(name,hex){
+  const src=ART_OVERRIDES[name];
+  if(src){ const im=document.createElement('img'); im.className='art'; im.src=src; im.alt=''; im.loading='lazy'; return im; }
+  return posterArt(name,hex,themeOf(name));
+}
+
+
+/* accounts / clients — one poster per connected platform account */
+function accRender(){
+  const box=document.getElementById('accStrip'); if(!box)return;
+  box.innerHTML='';
+  const acctId={google:cfg.gcid,meta:cfg.fbid,tiktok:cfg.ttadv,linkedin:cfg.liacct};
+  const list=Object.keys(PLATFORMS).map(p=>{
+    const rows=state.rows.filter(r=>r.platform===p);
+    return {p,rows,spend:rows.reduce((s,r)=>s+r.spend,0)};
+  }).filter(a=>a.rows.length);
+  if(!list.length){ box.style.display='none'; return; }
+  box.style.display='';
+  list.sort((a,b)=>b.spend-a.spend).forEach(a=>{
+    const hex=PLATFORMS[a.p].hex, label=PLATFORMS[a.p].label;
+    const cur=(a.rows[0]&&a.rows[0].currency)||'USD';
+    const d=document.createElement('div');
+    d.className='acc-card'+(state.platform===a.p?' on':'');
+    d.appendChild(artNode(label+' account',hex));
+    const n=document.createElement('div'); n.className='an'; n.textContent=label; d.appendChild(n);
+    const v=document.createElement('div'); v.className='av'; v.textContent=fmtMoney(a.spend,cur); d.appendChild(v);
+    const m=document.createElement('div'); m.className='am';
+    m.textContent=(state.demo?'demo account':(acctId[a.p]||'connected'))+' · '+a.rows.length+' campaigns';
+    d.appendChild(m);
+    d.addEventListener('click',()=>{ state.platform=state.platform===a.p?'all':a.p; render(); });
+    box.appendChild(d);
+  });
+}
+
 /* ═════════════════════ coverflow spotlight ═════════════════════
    Mirrors the reference carousel: the centred card sits upright and
    vivid, neighbours scale down / rotate away / dim, and the ambient
@@ -1115,7 +1272,6 @@ function cfRender(){
     const hex=PLATFORMS[r.platform].hex;
     const c=document.createElement('div');
     c.className='cf-card'; c.dataset.i=idx;
-    c.style.setProperty('--cardbg','linear-gradient(160deg,'+hex+'44,'+hex+'14 62%),var(--panel2)');
     const st=String(r.status).toUpperCase();
     c.innerHTML=
       '<div class="cf-top"><span class="pdot"></span><span class="cf-plat"></span></div>'+
@@ -1123,9 +1279,11 @@ function cfRender(){
       '<div class="cf-spend"></div>'+
       '<div class="cf-sub"></div>'+
       '<div class="cf-ring"></div>';
+    c.insertBefore(artNode(r.name,hex),c.firstChild);
     c.querySelector('.pdot').style.background=hex;
     c.querySelector('.cf-plat').textContent=PLATFORMS[r.platform].label.replace(' Ads','');
     c.querySelector('.cf-plat').style.color=hex;
+    c.querySelector('.cf-top').style.textShadow='0 1px 10px rgba(0,0,0,.6)';
     c.querySelector('.cf-nm').textContent=r.name;
     c.querySelector('.cf-spend').textContent=fmtMoney(r.spend,r.currency);
     c.querySelector('.cf-sub').textContent=(st.includes('ACTIVE')?'Active':'Paused')+' · '+
