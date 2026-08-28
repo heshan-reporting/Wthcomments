@@ -16,7 +16,10 @@
  *   GOOGLE_ADS_CLIENT_ID
  *   GOOGLE_ADS_CLIENT_SECRET
  *   GOOGLE_ADS_REFRESH_TOKEN
- *   (optional) TIKTOK_ACCESS_TOKEN, TIKTOK_ADVERTISER_ID, LINKEDIN_ACCESS_TOKEN
+ *   (optional) TIKTOK_ACCESS_TOKEN, TIKTOK_ADVERTISER_ID
+ *   (optional) LINKEDIN_ACCESS_TOKEN, LINKEDIN_AD_ACCOUNT_ID, LINKEDIN_VERSION
+ *   Platform tokens may also arrive per-request as body.accessToken (set in the
+ *   app's Configuration) — worker secrets take precedence when both exist.
  * ------------------------------------------------------------------
  */
 
@@ -81,7 +84,7 @@ async function claude(body, env) {
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: body.model || 'claude-sonnet-4-6',
+      model: body.model || 'claude-sonnet-5',
       max_tokens: body.max_tokens || 8192,
       system: body.system,
       tools: body.tools,
@@ -225,9 +228,9 @@ async function googleAccessToken(env) {
 
 /* ── TIKTOK Ads ───────────────────────────────────────────────────── */
 async function tiktokAds(body, env) {
-  const token = env.TIKTOK_ACCESS_TOKEN;
+  const token = env.TIKTOK_ACCESS_TOKEN || body.accessToken;
   const adv = body.advertiserId || env.TIKTOK_ADVERTISER_ID;
-  if (!token) return json({ error: 'TikTok not configured (set TIKTOK_ACCESS_TOKEN)' });
+  if (!token) return json({ error: 'TikTok not configured — set the TIKTOK_ACCESS_TOKEN worker secret, or add your token in the app Configuration' });
   if (!adv) return json({ error: 'No TikTok advertiser ID (set it in the app Config, or TIKTOK_ADVERTISER_ID secret)' });
 
   const base = 'https://business-api.tiktok.com/open_api/v1.3';
@@ -250,6 +253,11 @@ async function tiktokAds(body, env) {
     return q.toString();
   };
 
+  // TikTok BASIC reports require an explicit date range — default to last 30 days.
+  const day = (d) => d.toISOString().slice(0, 10);
+  const endDate = body.endDate || day(new Date());
+  const startDate = body.startDate || day(new Date(Date.now() - 30 * 864e5));
+
   let url;
   if (action === 'report') {
     const dims = body.dimensions || ['campaign_id'];
@@ -259,8 +267,8 @@ async function tiktokAds(body, env) {
       data_level: dataLevel(dims),
       dimensions: dims,
       metrics: body.metrics || ['spend', 'impressions', 'clicks', 'ctr', 'cpc'],
-      start_date: body.startDate,
-      end_date: body.endDate,
+      start_date: startDate,
+      end_date: endDate,
       page_size: body.pageSize || 1000,
     };
     if (body.orderField) params.order_field = body.orderField;
@@ -286,10 +294,137 @@ async function tiktokAds(body, env) {
   return json({ data: list, total: list.length, page_info: resp.data && resp.data.page_info });
 }
 
-/* ── LINKEDIN (optional stub) ─────────────────────────────────────── */
+/* ── LINKEDIN Marketing API ───────────────────────────────────────── */
+// Actions: analytics (default) | campaigns | campaign_groups | creatives | accounts
+// Uses the versioned REST API (Restli 2.0). Parentheses in Restli query
+// syntax must stay raw — never run these query strings through URLSearchParams.
 async function linkedinAds(body, env) {
-  const token = env.LINKEDIN_ACCESS_TOKEN;
-  if (!token) return json({ error: 'LinkedIn not configured (set LINKEDIN_ACCESS_TOKEN)' });
-  // Fill in your exact LinkedIn Marketing API call here if you use it.
-  return json({ error: 'LinkedIn handler not implemented — send me your query shape to complete it.' });
+  let token = env.LINKEDIN_ACCESS_TOKEN || body.accessToken;
+  if (!token) return json({ error: 'LinkedIn not configured — set the LINKEDIN_ACCESS_TOKEN worker secret, or add your token in the app Configuration' });
+
+  const LI_V = env.LINKEDIN_VERSION || '202506';
+  const BASE = 'https://api.linkedin.com/rest';
+  const acctId = String(body.accountId || env.LINKEDIN_AD_ACCOUNT_ID || '')
+    .replace(/^urn:li:sponsoredAccount:/, '').trim();
+  const action = body.action || 'analytics';
+  const count = Math.min(Number(body.count) || 50, 100);
+
+  const mkHeaders = () => ({
+    Authorization: 'Bearer ' + token,
+    'LinkedIn-Version': LI_V,
+    'X-Restli-Protocol-Version': '2.0.0',
+  });
+
+  // Refresh-on-401: needs a refresh token (secret or app config) plus
+  // LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET worker secrets.
+  const refreshToken = env.LINKEDIN_REFRESH_TOKEN || body.refreshToken;
+  let refreshed = false;
+  const tryRefresh = async () => {
+    if (refreshed || !refreshToken || !env.LINKEDIN_CLIENT_ID || !env.LINKEDIN_CLIENT_SECRET) return false;
+    refreshed = true;
+    const r = await fetch('https://www.linkedin.com/oauth/v2/accessToken', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: env.LINKEDIN_CLIENT_ID,
+        client_secret: env.LINKEDIN_CLIENT_SECRET,
+      }),
+    });
+    const d = await r.json().catch(() => null);
+    if (d && d.access_token) { token = d.access_token; return true; }
+    return false;
+  };
+
+  const liFetch = async (url) => {
+    let res = await fetch(url, { headers: mkHeaders() });
+    if (res.status === 401 && await tryRefresh()) {
+      res = await fetch(url, { headers: mkHeaders() });
+    }
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch (_) { data = null; }
+    if (!res.ok) {
+      const msg = (data && (data.message || data.error_description)) || text.slice(0, 300);
+      return { error: 'LinkedIn ' + res.status + ': ' + msg };
+    }
+    return { data };
+  };
+
+  // Restli date helper: (start:(year:Y,month:M,day:D),end:(...))
+  const dpart = (d) => `(year:${d.getUTCFullYear()},month:${d.getUTCMonth() + 1},day:${d.getUTCDate()})`;
+  const parseDay = (s) => { const [y, m, d] = String(s).split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+
+  if (action === 'accounts') {
+    const r = await liFetch(`${BASE}/adAccounts?q=search&pageSize=${count}`);
+    if (r.error) return json(r);
+    const rows = r.data.elements || [];
+    return json({ data: rows, total: rows.length });
+  }
+
+  if (!acctId) return json({ error: 'No LinkedIn ad account ID — set it in the app Configuration (numeric ID), or use action:"accounts" to list accessible accounts' });
+
+  if (action === 'campaigns' || action === 'campaign_groups') {
+    const node = action === 'campaigns' ? 'adCampaigns' : 'adCampaignGroups';
+    let url = `${BASE}/adAccounts/${acctId}/${node}?q=search&pageSize=${count}&sortOrder=DESCENDING`;
+    if (body.status) url += `&search=(status:(values:List(${encodeURIComponent(body.status)})))`;
+    const r = await liFetch(url);
+    if (r.error) return json(r);
+    const rows = r.data.elements || [];
+    return json({ data: rows, total: rows.length });
+  }
+
+  if (action === 'creatives') {
+    let url = `${BASE}/adAccounts/${acctId}/creatives?q=criteria&pageSize=${count}`;
+    if (body.campaignId) {
+      const urn = encodeURIComponent(`urn:li:sponsoredCampaign:${String(body.campaignId).replace(/^urn:li:sponsoredCampaign:/, '')}`);
+      url += `&campaigns=List(${urn})`;
+    }
+    const r = await liFetch(url);
+    if (r.error) return json(r);
+    const rows = r.data.elements || [];
+    return json({ data: rows, total: rows.length });
+  }
+
+  // ── analytics (default) ──
+  const end = body.endDate ? parseDay(body.endDate) : new Date();
+  const start = body.startDate ? parseDay(body.startDate) : new Date(end.getTime() - 30 * 864e5);
+  const dateRange = `(start:${dpart(start)},end:${dpart(end)})`;
+  const pivot = body.pivot || 'CAMPAIGN';
+  const granularity = body.timeGranularity || 'ALL';
+  const metrics = (Array.isArray(body.metrics) && body.metrics.length ? body.metrics
+    : ['impressions', 'clicks', 'costInLocalCurrency', 'externalWebsiteConversions']).slice(0, 18);
+  const fields = Array.from(new Set([...metrics, 'pivotValues', 'dateRange'])).join(',');
+
+  let scope;
+  if (Array.isArray(body.campaignIds) && body.campaignIds.length) {
+    const urns = body.campaignIds
+      .map((id) => encodeURIComponent(`urn:li:sponsoredCampaign:${String(id).replace(/^urn:li:sponsoredCampaign:/, '')}`))
+      .join(',');
+    scope = `campaigns=List(${urns})`;
+  } else {
+    scope = `accounts=List(${encodeURIComponent(`urn:li:sponsoredAccount:${acctId}`)})`;
+  }
+
+  const url = `${BASE}/adAnalytics?q=analytics&pivot=${pivot}&timeGranularity=${granularity}` +
+    `&dateRange=${dateRange}&${scope}&fields=${fields}`;
+  const r = await liFetch(url);
+  if (r.error) return json(r);
+
+  // Computed efficiency fields the app's tool description promises.
+  const num = (v) => { const n = parseFloat(v); return isFinite(n) ? n : 0; };
+  const rows = (r.data.elements || []).map((e) => {
+    const imp = num(e.impressions), clk = num(e.clicks);
+    const cost = num(e.costInLocalCurrency);
+    const conv = num(e.externalWebsiteConversions);
+    return {
+      ...e,
+      _ctr: imp > 0 ? +(clk / imp * 100).toFixed(3) : null,
+      _cpm: imp > 0 ? +(cost / imp * 1000).toFixed(2) : null,
+      _cpc: clk > 0 ? +(cost / clk).toFixed(2) : null,
+      _cpa: conv > 0 ? +(cost / conv).toFixed(2) : null,
+    };
+  });
+  return json({ data: rows, total: rows.length, pivot, dateRange: { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) } });
 }
