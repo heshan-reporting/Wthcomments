@@ -1003,6 +1003,12 @@ textarea:focus,input:focus{outline:none}
       New conversation
     </button>
   </div>
+  <div class="sb-act" style="padding-top:0">
+    <a class="sb-sbtn" href="portal.html" style="text-decoration:none">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+      Ads Portal
+    </a>
+  </div>
   <div class="sb-sec">Conversations</div>
   <div class="sb-list" id="cv-list"></div>
   <div class="sb-bot">
@@ -1358,7 +1364,7 @@ console.log(tokens.refresh_token);</code></pre>
 
 <script>
 // ── Config ────────────────────────────────────────────────────────────────────
-const CK=['key','wurl','wsec','gcid','gmgr','fbid','tttoken','ttadv','litoken','liacct','lirefresh','sys'];
+const CK=['key','model','wurl','wsec','gcid','gmgr','fbid','tttoken','ttadv','litoken','liacct','lirefresh','sys'];
 let cfg={};
 function uKey(k){var uid=currentUser?currentUser.id:'guest';return 'cmm_'+uid+'_'+k;}
 const DEFAULT_WURL='https://ads-proxy.heshan-998.workers.dev/';
