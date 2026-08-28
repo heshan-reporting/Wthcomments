@@ -308,6 +308,47 @@ table.ct{width:100%;border-collapse:collapse;font-size:12.5px;min-width:760px}
 .sheet .formula{font-family:var(--fmono);font-size:10.5px;color:var(--tx2);line-height:1.7;background:var(--chip);
   border:1px solid var(--brd2);border-radius:12px;padding:10px 12px;margin-top:12px;overflow-x:auto;white-space:nowrap}
 
+
+/* ── COVERFLOW SPOTLIGHT (ref: card carousel video) ───────────────────────── */
+.cf{position:relative;margin-bottom:14px;border-radius:24px;overflow:hidden;
+  background:var(--panel);border:1px solid var(--brd2);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.cf-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 20px 4px;position:relative;z-index:3}
+.cf-head h3{font-size:13px;font-weight:600;color:var(--tx2)}
+.cf-nav{display:flex;gap:6px}
+.cf-nav button{width:32px;height:32px;border-radius:50%;border:1px solid var(--brd2);background:var(--chip);
+  color:var(--tx2);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .2s}
+.cf-nav button:hover{background:var(--chiphv);color:var(--tx);transform:scale(1.08)}
+.cf-nav svg{width:15px;height:15px}
+/* ambient glow takes the centred card's platform colour */
+.cf-glow{position:absolute;inset:-30% -10% -40%;z-index:0;pointer-events:none;opacity:.72;
+  background:radial-gradient(60% 60% at 50% 45%,var(--glow,#a78bfa) 0%,transparent 70%);
+  filter:blur(52px);transition:background .85s ease,opacity .85s ease}
+.cf-stage{position:relative;height:268px;perspective:1500px;z-index:2;touch-action:pan-y;cursor:grab}
+.cf-stage:active{cursor:grabbing}
+@media(max-width:560px){.cf-stage{height:246px}}
+.cf-card{position:absolute;left:50%;top:50%;width:216px;height:212px;margin:-106px 0 0 -108px;
+  border-radius:22px;padding:15px 16px;overflow:hidden;transform-style:preserve-3d;
+  border:1px solid rgba(255,255,255,.42);background:var(--cardbg,rgba(255,255,255,.30));
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  box-shadow:0 18px 46px rgba(40,28,16,.30);will-change:transform,opacity;
+  display:flex;flex-direction:column;gap:6px}
+body.motion .cf-card{transition:transform .72s cubic-bezier(.32,.72,.32,1),opacity .72s ease,filter .72s ease,box-shadow .4s}
+.cf-card.on{cursor:pointer;box-shadow:0 26px 64px rgba(30,20,10,.42)}
+.cf-card .cf-top{display:flex;align-items:center;gap:7px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.cf-card .cf-top .pdot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.cf-card .cf-nm{font-size:14px;font-weight:600;line-height:1.35;margin-top:1px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cf-card .cf-spend{font-size:26px;font-weight:700;letter-spacing:-.8px;margin-top:auto}
+.cf-card .cf-sub{font-size:10.5px;color:var(--tx2);font-family:var(--fmono)}
+.cf-card .cf-ring{position:absolute;right:13px;top:13px}
+.cf-card .cf-ring text{font-family:var(--fm);font-weight:700}
+.cf-dots{display:flex;gap:5px;justify-content:center;padding:2px 0 14px;position:relative;z-index:3}
+.cf-dots i{width:6px;height:6px;border-radius:50%;background:var(--tx3);opacity:.4;cursor:pointer;transition:all .3s}
+.cf-dots i.on{opacity:1;width:18px;border-radius:3px;background:var(--tx2)}
+/* spatial 3D tilt (ref: floating-panels video) */
+body.motion .tilt{transition:transform .5s cubic-bezier(.32,.72,.32,1)}
+body.motion .tilt.live{transition:transform .12s linear}
+
 /* gate */
 .gate{max-width:520px;margin:6vh auto;text-align:center;padding:40px 28px}
 .gate .g-orb{width:74px;height:74px;border-radius:50%;margin:0 auto 20px;opacity:.92;
@@ -431,6 +472,19 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,tr
         <div class="chart-wrap" id="heroChart"></div>
       </section>
 
+
+      <section class="cf anim" style="--i:2" id="cfSec">
+        <div class="cf-glow" id="cfGlow"></div>
+        <div class="cf-head">
+          <h3>Campaign spotlight <span id="cfCount" style="color:var(--tx3);font-weight:400"></span></h3>
+          <div class="cf-nav">
+            <button onclick="cfMove(-1)" aria-label="Previous campaign"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="15 18 9 12 15 6"/></svg></button>
+            <button onclick="cfMove(1)" aria-label="Next campaign"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="9 18 15 12 9 6"/></svg></button>
+          </div>
+        </div>
+        <div class="cf-stage" id="cfStage"></div>
+        <div class="cf-dots" id="cfDots"></div>
+      </section>
       <section class="tiles" id="tiles"></section>
 
       <section class="card tbl-card anim" style="--i:5" id="tblCard">
@@ -537,6 +591,7 @@ function applyPrefs(rerender){
   const ch=document.getElementById('prefChart'); if(ch)ch.value=prefs.chartStyle;
   const meta=document.querySelector('meta[name="theme-color"]');
   if(meta)meta.setAttribute('content',prefs.theme==='dark'?'#241c15':'#e6dccb');
+  if(noMotion())cfStop(); else cfStart();
   if(rerender&&state.loaded)render();
 }
 function onSearch(v){ state.q=(v||'').trim().toLowerCase(); if(state.loaded)render(); }
@@ -959,6 +1014,8 @@ function render(){
     const d=document.createElement('div'); d.className='err-note';
     d.textContent=PLATFORMS[p].label+': '+msg; pe.appendChild(d); });
 
+  cfRender();
+
   /* donut + legend */
   const parts=Object.keys(PLATFORMS).map(p=>({name:PLATFORMS[p].label,color:PLATFORMS[p].hex,
     value:state.rows.filter(r=>r.platform===p).reduce((s,r)=>s+r.spend,0)})).filter(p=>p.value>0);
@@ -1034,6 +1091,144 @@ function renderSideCamps(){
     box.appendChild(d);
   });
 }
+
+
+/* ═════════════════════ coverflow spotlight ═════════════════════
+   Mirrors the reference carousel: the centred card sits upright and
+   vivid, neighbours scale down / rotate away / dim, and the ambient
+   glow behind the deck takes the centred campaign's platform colour. */
+let cf={ i:0, items:[], timer:null, drag:null };
+
+function cfRender(){
+  const stage=document.getElementById('cfStage'); if(!stage)return;
+  const sec=document.getElementById('cfSec');
+  const rows=[...visibleRows()].sort((a,b)=>b.spend-a.spend).slice(0,8);
+  cf.items=rows;
+  document.getElementById('cfCount').textContent=rows.length?'· top '+rows.length:'';
+  if(!rows.length){ sec.style.display='none'; cfStop(); return; }
+  sec.style.display='';
+  if(cf.i>=rows.length)cf.i=0;
+  const rg=rangeDates();
+  stage.innerHTML='';
+  rows.forEach((r,idx)=>{
+    const pc=pacing(r,rg);
+    const hex=PLATFORMS[r.platform].hex;
+    const c=document.createElement('div');
+    c.className='cf-card'; c.dataset.i=idx;
+    c.style.setProperty('--cardbg','linear-gradient(160deg,'+hex+'44,'+hex+'14 62%),var(--panel2)');
+    const st=String(r.status).toUpperCase();
+    c.innerHTML=
+      '<div class="cf-top"><span class="pdot"></span><span class="cf-plat"></span></div>'+
+      '<div class="cf-nm"></div>'+
+      '<div class="cf-spend"></div>'+
+      '<div class="cf-sub"></div>'+
+      '<div class="cf-ring"></div>';
+    c.querySelector('.pdot').style.background=hex;
+    c.querySelector('.cf-plat').textContent=PLATFORMS[r.platform].label.replace(' Ads','');
+    c.querySelector('.cf-plat').style.color=hex;
+    c.querySelector('.cf-nm').textContent=r.name;
+    c.querySelector('.cf-spend').textContent=fmtMoney(r.spend,r.currency);
+    c.querySelector('.cf-sub').textContent=(st.includes('ACTIVE')?'Active':'Paused')+' · '+
+      (r.dailyBudget?fmtMoney(r.dailyBudget,r.currency)+'/day':'no budget');
+    c.querySelector('.cf-ring').appendChild(pacingRing(pc));
+    c.addEventListener('click',()=>{ if(idx===cf.i)openSheet(r,pc,rg); else cfGo(idx); });
+    stage.appendChild(c);
+  });
+  cfLayout();
+  cfDots();
+  cfStart();
+}
+
+/* small circular pacing gauge on each card */
+function pacingRing(pc){
+  const S=44,R=17,C=2*Math.PI*R;
+  const svg=document.createElementNS(svgNS,'svg');
+  svg.setAttribute('viewBox','0 0 '+S+' '+S); svg.setAttribute('width',S); svg.setAttribute('height',S);
+  const col={good:'var(--st-good)',warn:'var(--st-warn)',serious:'var(--st-serious)',critical:'var(--st-critical)',none:'var(--tx3)'}[pc.status];
+  el('circle',{cx:S/2,cy:S/2,r:R,fill:'none',stroke:'rgba(128,128,128,.25)','stroke-width':4},svg);
+  if(pc.pctv!=null){
+    const frac=Math.max(0,Math.min(1,pc.pctv/150));
+    const arc=el('circle',{cx:S/2,cy:S/2,r:R,fill:'none',stroke:col,'stroke-width':4,'stroke-linecap':'round',
+      'stroke-dasharray':C,'stroke-dashoffset':noMotion()?C*(1-frac):C,
+      transform:'rotate(-90 '+(S/2)+' '+(S/2)+')'},svg);
+    if(!noMotion()){ arc.style.transition='stroke-dashoffset 1s cubic-bezier(.22,.9,.32,1) .15s';
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{ arc.style.strokeDashoffset=C*(1-frac); })); }
+  }
+  const t=el('text',{x:S/2,y:S/2+3.5,'text-anchor':'middle','font-size':'10.5',fill:col},svg);
+  t.textContent=pc.pctv==null?'—':Math.round(pc.pctv)+'%';
+  return svg;
+}
+
+function cfLayout(){
+  const stage=document.getElementById('cfStage'); if(!stage)return;
+  const narrow=innerWidth<560;
+  const X=narrow?150:190, X2=narrow?250:330;
+  const n=cf.items.length;
+  [...stage.children].forEach((c,idx)=>{
+    /* circular offset — the deck wraps, so the centred card always has
+       neighbours on both sides like the reference carousel */
+    let d=idx-cf.i;
+    if(d>n/2)d-=n; else if(d<-n/2)d+=n;
+    const ad=Math.abs(d), sgn=Math.sign(d);
+    let tx,sc,ry,op,z,blur;
+    if(ad===0){ tx=0; sc=1; ry=0; op=1; z=30; blur=0; }
+    else if(ad===1){ tx=sgn*X; sc=.82; ry=-sgn*22; op=.62; z=20; blur=1.2; }
+    else if(ad===2){ tx=sgn*X2; sc=.66; ry=-sgn*28; op=.30; z=10; blur=2.4; }
+    else{ tx=sgn*(X2+90); sc=.55; ry=-sgn*32; op=0; z=1; blur=4; }
+    c.style.transform='translateX('+tx+'px) translateZ('+(ad===0?60:-ad*60)+'px) rotateY('+ry+'deg) scale('+sc+')';
+    c.style.opacity=op; c.style.zIndex=z; c.style.filter='blur('+blur+'px)';
+    c.classList.toggle('on',ad===0);
+    c.setAttribute('aria-hidden',ad===0?'false':'true');
+  });
+  const act=cf.items[cf.i];
+  const glow=document.getElementById('cfGlow');
+  if(act&&glow)glow.style.setProperty('--glow',PLATFORMS[act.platform].hex);
+  cfDots();
+}
+function cfDots(){
+  const box=document.getElementById('cfDots'); if(!box)return;
+  box.innerHTML='';
+  cf.items.forEach((_,idx)=>{ const d=document.createElement('i');
+    if(idx===cf.i)d.className='on'; d.addEventListener('click',()=>cfGo(idx)); box.appendChild(d); });
+}
+function cfGo(i){ if(!cf.items.length)return; cf.i=(i+cf.items.length)%cf.items.length; cfLayout(); cfStart(); }
+function cfMove(step){ cfGo(cf.i+step); }
+function cfStart(){ cfStop(); if(noMotion()||cf.items.length<2)return;
+  cf.timer=setInterval(()=>{ if(!document.hidden)cfGo(cf.i+1); },4200); }
+function cfStop(){ if(cf.timer){ clearInterval(cf.timer); cf.timer=null; } }
+
+/* drag / swipe + keyboard */
+(function cfBind(){
+  const stage=document.getElementById('cfStage'); if(!stage)return;
+  stage.addEventListener('pointerdown',e=>{ cf.drag={x:e.clientX,moved:false}; cfStop(); });
+  addEventListener('pointermove',e=>{ if(!cf.drag)return;
+    const dx=e.clientX-cf.drag.x;
+    if(Math.abs(dx)>52){ cfMove(dx<0?1:-1); cf.drag.x=e.clientX; cf.drag.moved=true; } });
+  addEventListener('pointerup',()=>{ if(cf.drag){ cf.drag=null; cfStart(); } });
+  stage.addEventListener('mouseenter',cfStop);
+  stage.addEventListener('mouseleave',cfStart);
+  addEventListener('keydown',e=>{
+    if(document.getElementById('sheet').classList.contains('on'))return;
+    if(e.key==='ArrowRight')cfMove(1); else if(e.key==='ArrowLeft')cfMove(-1); });
+  addEventListener('resize',cfLayout);
+})();
+
+/* spatial pointer tilt on glass cards (ref: floating-panels video) */
+(function tiltBind(){
+  const sel='.card, .tile, .cf-card.on';
+  addEventListener('pointermove',e=>{
+    if(noMotion())return;
+    const t=e.target.closest? e.target.closest(sel):null;
+    document.querySelectorAll('.tilt.live').forEach(n=>{ if(n!==t){ n.classList.remove('live'); n.style.transform=''; } });
+    if(!t)return;
+    const r=t.getBoundingClientRect();
+    const px=(e.clientX-r.left)/r.width-.5, py=(e.clientY-r.top)/r.height-.5;
+    t.classList.add('tilt','live');
+    const base=t.classList.contains('cf-card')?' translateZ(60px)':'';
+    t.style.transform='perspective(900px) rotateY('+(px*5).toFixed(2)+'deg) rotateX('+(-py*5).toFixed(2)+'deg)'+base+' translateY(-2px)';
+  },{passive:true});
+  addEventListener('pointerleave',()=>{ document.querySelectorAll('.tilt.live').forEach(n=>{ n.classList.remove('live'); n.style.transform=''; }); });
+})();
 
 /* ═════════════════════ sheet ═════════════════════ */
 function openSheet(r,pc,rg){
