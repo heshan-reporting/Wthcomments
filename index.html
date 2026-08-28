@@ -551,13 +551,17 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 .fld{margin-bottom:16px}
 .fld label{display:block;font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:5px}
 .fhint{font-size:11px;color:var(--text-3);margin-bottom:5px;line-height:1.4}
-.fld input,.fld textarea{
+.fld input,.fld textarea,.fld select{
   width:100%;padding:9px 12px;
   border:1px solid var(--border);border-radius:10px;
   font-family:var(--fm);font-size:13px;color:var(--text);
   background:var(--glass);outline:none;transition:all .18s;
 }
-.fld input:focus,.fld textarea:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(0,229,255,.08);background:var(--glass-md)}
+.fld select{appearance:none;-webkit-appearance:none;cursor:pointer;
+  background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237280a8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 12px center;padding-right:34px}
+.fld select option{background:#0c0f1e;color:var(--text)}
+.fld input:focus,.fld textarea:focus,.fld select:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(0,229,255,.08);background-color:var(--glass-md)}
 .fld textarea{resize:vertical;min-height:75px;font-family:var(--fmono);font-size:12px}
 .fdiv{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--text-3);padding:10px 0 12px;border-top:1px solid var(--border);margin-top:4px;display:flex;align-items:center;gap:8px}
 .fdot{width:7px;height:7px;border-radius:50%;flex-shrink:0}.fdot.g{background:var(--cyan)}.fdot.f{background:var(--fb)}
@@ -1190,6 +1194,15 @@ textarea:focus,input:focus{outline:none}
         <div class="fhint">Stored in your browser only — never uploaded anywhere.</div>
         <input type="password" id="c-key" placeholder="sk-ant-api03-&hellip;">
       </div>
+      <div class="fld">
+        <label>Model</label>
+        <div class="fhint">Which Claude model answers your questions.</div>
+        <select id="c-model">
+          <option value="claude-sonnet-5">Sonnet 5 — fast &amp; affordable (recommended)</option>
+          <option value="claude-opus-5">Opus 5 — most capable</option>
+          <option value="claude-haiku-4-5">Haiku 4.5 — fastest</option>
+        </select>
+      </div>
       <div class="fdiv"><span class="fdot g"></span>Cloudflare Worker</div>
       <div class="fld">
         <label>Worker URL</label>
@@ -1251,7 +1264,7 @@ textarea:focus,input:focus{outline:none}
       </div>
       <div class="fld">
         <label>LinkedIn Refresh Token <span style="font-weight:400;color:#8a9a8a">— optional, enables auto-refresh</span></label>
-        <div class="fhint">If set (with Client ID + Secret), token auto-renews on expiry. Otherwise re-enter access token every 60 days.</div>
+        <div class="fhint">Auto-renews an expired access token, but only if the LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET secrets are also set on your Cloudflare Worker. Otherwise re-enter the access token every 60 days.</div>
         <input type="password" id="c-lirefresh" placeholder="Your LinkedIn refresh token">
       </div>
       <div class="fdiv">Advanced</div>
@@ -1510,6 +1523,12 @@ async function callWorker(body){
     });
     const text=await r.text();
     if(!r.ok)return{error:`Worker ${r.status}: ${text.slice(0,300)}`};
+    // The worker reports platform failures as {"error": "..."} with HTTP 200 —
+    // surface them as errors so tool cards go red and the model can adapt.
+    try{
+      const parsed=JSON.parse(text);
+      if(parsed&&parsed.error)return{error:String(parsed.error)};
+    }catch(_){}
     return{data:text};
   }catch(e){return{error:'Fetch failed: '+e.message}}
 }
@@ -1522,10 +1541,14 @@ async function googleQuery(gaql){
   return callWorker(body);
 }
 
+// Tokens may live either on the worker (env secrets — preferred) or in this
+// app's Configuration. Pass the local token when we have one and let the
+// worker decide; never block the call just because no local token is stored.
 async function linkedinQuery(input){
   if(!cfg.wurl)return{error:'No Worker URL — open Configuration'};
-  if(!cfg.litoken)return{error:'No LinkedIn Access Token — add it in Configuration'};
   var body={source:'linkedin_ads'};
+  if(cfg.litoken)body.accessToken=cfg.litoken;
+  if(cfg.lirefresh)body.refreshToken=cfg.lirefresh;
   if(cfg.liacct)body.accountId=cfg.liacct;
   Object.keys(input).forEach(function(k){if(k!=='description')body[k]=input[k];});
   return callWorker(body);
@@ -1533,8 +1556,8 @@ async function linkedinQuery(input){
 
 async function tiktokQuery(input){
   if(!cfg.wurl)return{error:'No Worker URL — open Configuration'};
-  if(!cfg.tttoken)return{error:'No TikTok Access Token — add it in Configuration'};
   var body={source:'tiktok_ads'};
+  if(cfg.tttoken)body.accessToken=cfg.tttoken;
   if(cfg.ttadv)body.advertiserId=cfg.ttadv;
   Object.keys(input).forEach(function(k){if(k!=='description')body[k]=input[k];});
   return callWorker(body);
@@ -1839,10 +1862,21 @@ EXAMPLES:
   }];
 
 const DEFAULT_SYS=`You are the CMM Ads Intelligence assistant, built by Curious Minds Media.
-You are a senior performance marketing analyst with expert-level knowledge of Meta (Facebook/Instagram) Ads and TikTok Ads.
+You are a senior performance marketing analyst with expert-level knowledge of Google Ads, Meta (Facebook/Instagram) Ads, TikTok Ads, and LinkedIn Ads.
 
 ## PLATFORMS
-You have FOUR tools: query_google_ads (Google Ads, GAQL via API v21), query_meta_ads (Meta), query_tiktok_ads (TikTok), and query_linkedin_ads (LinkedIn). Use the right tool per platform. For cross-platform questions, call all relevant tools and normalise currency, date range, and metric definitions before comparing.
+You have FOUR tools: query_google_ads (Google Ads, GAQL via API v21), query_meta_ads (Meta), query_tiktok_ads (TikTok), and query_linkedin_ads (LinkedIn). Use the right tool per platform. For cross-platform questions, call all relevant tools and normalise currency, date range, and metric definitions before comparing. TikTok reports and LinkedIn analytics default to the last 30 days when you omit dates.
+
+## ANALYTICAL RIGOR — NON-NEGOTIABLE
+- NEVER average ratios. Compute every rate/efficiency metric from summed components: CTR = Σclicks/Σimpressions, CPC = Σspend/Σclicks, CPA = Σspend/Σconversions, ROAS = Σrevenue/Σspend. Averaging per-campaign CTRs or CPCs gives wrong answers and is forbidden.
+- Division by zero: report "n/a" (e.g. CPA with 0 conversions), never 0 or infinity — and call out spend with zero conversions explicitly.
+- Unit conversions: Google Ads cost_micros must be divided by 1,000,000. Meta spend is already in currency units. State the currency of every money figure.
+- Meta conversions live in the "actions" array — always name which action_type you counted (e.g. purchase vs lead vs landing_page_view). Never sum unrelated action types.
+- Google "conversions" (conv. actions marked primary) vs "all_conversions" differ — say which you used.
+- Attribution differs per platform (click/view windows, modelled conversions). When comparing platforms, state that conversion counts are each platform's own attribution and not directly additive.
+- Small samples: below ~1,000 impressions or ~10 conversions, differences are usually noise — say so instead of declaring a winner.
+- Show your maths for any derived figure the user might act on (budget shifts, break-even CPA/ROAS): formula, inputs, result.
+- Percent changes: state the base period and direction ("CPC up 12% vs prior 30 days"), never a bare percentage.
 
 For LinkedIn specifically: pivot determines the breakdown level (CAMPAIGN, CREATIVE, demographics). Computed fields _ctr, _cpm, _cpc, _cpa are added automatically. Demographic pivots (MEMBER_JOB_FUNCTION etc.) have 12-24hr data delay. Lead gen metric: leadGenerationMailContactInfoShares.
 
@@ -1970,8 +2004,13 @@ async function ask(userMsg){
 
   try{
     let loop=true,iter=0;
+    const MAX_ITER=12; // hard stop so a tool-happy run can never loop forever
     while(loop){
       iter++;
+      if(iter>MAX_ITER){
+        appendMsg('ai','⚠️ Stopped after '+MAX_ITER+' analysis rounds to avoid a runaway loop. Ask a follow-up to continue from here.');
+        break;
+      }
       status.phase(iter===1?'thinking':'analyzing');
       const res=await fetch(cfg.wurl,{
         method:'POST',
@@ -1981,7 +2020,7 @@ async function ask(userMsg){
         },
         body:JSON.stringify({
           source:'claude',
-          model:'claude-sonnet-4-6',
+          model:cfg.model||'claude-sonnet-5',
           max_tokens:8192,
           system:datePreamble()+(cfg.sys||DEFAULT_SYS),
           tools:TOOLS,
@@ -2116,6 +2155,7 @@ function sendChip(el){appendMsg('user',el.textContent);ask(el.textContent)}
 function openSettings(){closeSidebar();
   loadCfg();
   document.getElementById('c-key').value=cfg.key||'';
+  var _mdl=document.getElementById('c-model');if(_mdl)_mdl.value=cfg.model||'claude-sonnet-5';
   document.getElementById('c-wurl').value=cfg.wurl||'';
   document.getElementById('c-wsec').value=cfg.wsec||'';
   document.getElementById('c-gcid').value=cfg.gcid||'';
@@ -2133,6 +2173,7 @@ function openSettings(){closeSidebar();
 }
 function saveSettings(){
   cfg.key=document.getElementById('c-key').value.trim();
+  var _mdl2=document.getElementById('c-model');if(_mdl2)cfg.model=_mdl2.value;
   cfg.wurl=document.getElementById('c-wurl').value.trim();
   cfg.wsec=document.getElementById('c-wsec').value.trim();
   cfg.gcid=document.getElementById('c-gcid').value.trim();
