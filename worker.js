@@ -44,8 +44,23 @@ function json(obj, status = 200) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+
+    // ── WhatsApp webhook (Meta calls this; no X-Auth-Token) ──
+    const url = new URL(request.url);
+    if (/\/whatsapp\/?$/.test(url.pathname)) {
+      if (request.method === 'GET') {
+        // Meta's one-time verification handshake
+        const p = url.searchParams;
+        if (p.get('hub.mode') === 'subscribe' && p.get('hub.verify_token') === env.WHATSAPP_VERIFY_TOKEN) {
+          return new Response(p.get('hub.challenge') || '', { status: 200 });
+        }
+        return new Response('Forbidden', { status: 403 });
+      }
+      if (request.method === 'POST') return await waInbound(request, env, ctx);
+    }
+
     if (request.method !== 'POST') return json({ error: 'POST only' }, 405);
 
     // Auth — matches the "Worker Auth Token" field in the app's Config
@@ -69,10 +84,17 @@ export default {
       if (source === 'linkedin_accounts') return await linkedinAccounts(body, env);
       if (source === 'tiktok_ads')    return await tiktokAds(body, env);
       if (source === 'linkedin_ads')  return await linkedinAds(body, env);
+      if (source === 'whatsapp_test') return await waTest(body, env);
+      if (source === 'whatsapp_digest') return json(await waRunDigest(env, body.days || 1, !!body.dryRun));
       return json({ error: 'Unknown source: ' + source }, 400);
     } catch (e) {
       return json({ error: String((e && e.message) || e) }, 200);
     }
+  },
+
+  // ── Cron Trigger: the scheduled WhatsApp digest ──
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(waRunDigest(env, Number(env.WHATSAPP_DIGEST_DAYS || 1), false));
   },
 };
 
@@ -504,4 +526,244 @@ async function linkedinAds(body, env) {
     };
   });
   return json({ data: rows, total: rows.length, pivot, dateRange: { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) } });
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   WHATSAPP — scheduled digests + two-way Q&A
+   ---------------------------------------------------------------------------
+   Secrets: WHATSAPP_TOKEN, WHATSAPP_PHONE_ID, WHATSAPP_RECIPIENTS (E.164,
+   comma separated), WHATSAPP_VERIFY_TOKEN, WHATSAPP_TEMPLATE (default
+   "ads_update"), WHATSAPP_TEMPLATE_LANG (default "en"), optional
+   WHATSAPP_DIGEST_DAYS, CLIENTS_JSON, WHATSAPP_ALLOWED (numbers allowed to
+   ask questions; defaults to WHATSAPP_RECIPIENTS).
+   ═════════════════════════════════════════════════════════════════════════ */
+
+const WA_V = 'v21.0';
+const waNums = (v) => String(v || '').split(',').map((x) => x.trim().replace(/[^\d+]/g, '')).filter(Boolean);
+const waDay = (d) => d.toISOString().slice(0, 10);
+const waMoney = (n, cur) => (cur ? cur + ' ' : '$') + Math.round(Number(n) || 0).toLocaleString('en-US');
+
+/* Client roster for the worker. CLIENTS_JSON wins; otherwise every Meta ad
+   account the token can reach becomes a client, so the digest works with no
+   extra configuration. */
+async function waClients(env) {
+  if (env.CLIENTS_JSON) {
+    try { const c = JSON.parse(env.CLIENTS_JSON); if (Array.isArray(c) && c.length) return c; } catch (_) {}
+  }
+  const r = await metaAccounts(env);
+  const d = await r.json();
+  if (d.error) return [];
+  return (d.accounts || []).map((a) => ({ name: a.name, meta: { act: a.id }, currency: a.currency }));
+}
+
+/* Spend per client for a window, plus the previous window for comparison. */
+async function waPortfolio(env, days) {
+  const clients = await waClients(env);
+  const end = new Date(); end.setUTCHours(0, 0, 0, 0);
+  end.setUTCDate(end.getUTCDate() - 1);                       // yesterday, complete
+  const start = new Date(end.getTime() - (days - 1) * 864e5);
+  const pStart = new Date(start.getTime() - days * 864e5);
+  const pEnd = new Date(start.getTime() - 864e5);
+
+  const spendFor = async (act, a, b) => {
+    const res = await metaAds({
+      adAccountId: act, path: '/insights',
+      params: { level: 'account', fields: 'spend,impressions,clicks,account_currency',
+                time_range: JSON.stringify({ since: waDay(a), until: waDay(b) }) },
+    }, env);
+    const j = await res.json();
+    if (j.error) throw new Error(j.error);
+    const row = (j.data || [])[0] || {};
+    return { spend: Number(row.spend || 0), impressions: Number(row.impressions || 0),
+             clicks: Number(row.clicks || 0), currency: row.account_currency || 'USD' };
+  };
+
+  const rows = await Promise.all(clients.map(async (c) => {
+    const act = c.meta && c.meta.act;
+    if (!act) return null;
+    try {
+      const [cur, prev] = await Promise.all([spendFor(act, start, end), spendFor(act, pStart, pEnd)]);
+      return { name: c.name, ...cur, prevSpend: prev.spend };
+    } catch (e) { return { name: c.name, error: String(e.message || e) }; }
+  }));
+
+  const ok = rows.filter((r) => r && !r.error);
+  const bad = rows.filter((r) => r && r.error);
+  /* Totals are summed per currency — never add across currencies. */
+  const byCur = {};
+  ok.forEach((r) => { byCur[r.currency] = byCur[r.currency] || { spend: 0, prev: 0, clicks: 0, impressions: 0 };
+    byCur[r.currency].spend += r.spend; byCur[r.currency].prev += r.prevSpend;
+    byCur[r.currency].clicks += r.clicks; byCur[r.currency].impressions += r.impressions; });
+  ok.sort((a, b) => b.spend - a.spend);
+  return { start: waDay(start), end: waDay(end), days, clients: ok, failed: bad, byCurrency: byCur };
+}
+
+/* Compact digest lines — WhatsApp caps a message at 4096 chars. */
+function waDigestBody(p) {
+  const period = p.days === 1 ? p.end : p.start + ' → ' + p.end;
+  const cur = Object.entries(p.byCurrency);
+  const totals = cur.map(([c, v]) => {
+    const d = v.prev > 0 ? ((v.spend - v.prev) / v.prev) * 100 : null;
+    const arrow = d == null ? '' : (d >= 0 ? ' (▲' : ' (▼') + Math.abs(d).toFixed(0) + '% vs prior)';
+    return waMoney(v.spend, c) + arrow;
+  }).join(' · ');
+  const lines = p.clients.slice(0, 12).map((c) => {
+    const d = c.prevSpend > 0 ? ((c.spend - c.prevSpend) / c.prevSpend) * 100 : null;
+    const chg = d == null ? '' : ' ' + (d >= 0 ? '▲' : '▼') + Math.abs(d).toFixed(0) + '%';
+    const ctr = c.impressions > 0 ? ' · CTR ' + ((c.clicks / c.impressions) * 100).toFixed(2) + '%' : '';
+    return '• ' + c.name + ': ' + waMoney(c.spend, c.currency) + chg + ctr;
+  });
+  if (p.clients.length > 12) lines.push('…and ' + (p.clients.length - 12) + ' more');
+  if (p.failed.length) lines.push('⚠️ No data: ' + p.failed.map((f) => f.name).join(', '));
+  return { period, totals: totals || 'no spend', body: lines.join('\n') };
+}
+
+async function waSendText(env, to, text) {
+  const r = await fetch(`https://graph.facebook.com/${WA_V}/${env.WHATSAPP_PHONE_ID}/messages`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + env.WHATSAPP_TOKEN, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'text',
+      text: { preview_url: false, body: String(text).slice(0, 4000) } }),
+  });
+  return { to, status: r.status, body: (await r.text()).slice(0, 300) };
+}
+
+/* Proactive (unprompted) sends must use an approved template. */
+async function waSendTemplate(env, to, params) {
+  const r = await fetch(`https://graph.facebook.com/${WA_V}/${env.WHATSAPP_PHONE_ID}/messages`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + env.WHATSAPP_TOKEN, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp', to, type: 'template',
+      template: {
+        name: env.WHATSAPP_TEMPLATE || 'ads_update',
+        language: { code: env.WHATSAPP_TEMPLATE_LANG || 'en' },
+        components: [{ type: 'body', parameters: params.map((t) => ({ type: 'text', text: String(t).slice(0, 900) })) }],
+      },
+    }),
+  });
+  return { to, status: r.status, body: (await r.text()).slice(0, 300) };
+}
+
+async function waRunDigest(env, days, dryRun) {
+  if (!env.WHATSAPP_TOKEN || !env.WHATSAPP_PHONE_ID)
+    return { error: 'WHATSAPP_TOKEN and WHATSAPP_PHONE_ID must be set' };
+  const p = await waPortfolio(env, days || 1);
+  const d = waDigestBody(p);
+  const label = (days || 1) === 1 ? 'Yesterday' : 'Last ' + days + ' days';
+  if (dryRun) return { preview: { period: d.period, totals: d.totals, body: d.body }, clients: p.clients.length };
+  const to = waNums(env.WHATSAPP_RECIPIENTS);
+  if (!to.length) return { error: 'WHATSAPP_RECIPIENTS is empty' };
+  const sent = await Promise.all(to.map((n) =>
+    waSendTemplate(env, n, [label + ' · ' + d.period, d.totals, d.body || 'No spend recorded'])
+      .catch((e) => ({ to: n, error: String(e.message || e) }))));
+  return { sent, clients: p.clients.length, period: d.period };
+}
+
+async function waTest(body, env) {
+  const to = body.to ? waNums(body.to) : waNums(env.WHATSAPP_RECIPIENTS);
+  if (!to.length) return json({ error: 'No recipient — pass "to" or set WHATSAPP_RECIPIENTS' });
+  const out = await Promise.all(to.map((n) => waSendText(env, n, body.text || 'CMM Ads Intelligence — test message ✅')));
+  return json({ sent: out, note: 'Free-form text only reaches numbers that messaged you in the last 24h; otherwise use the template digest.' });
+}
+
+/* ── Inbound: reply to questions with the same tools the app uses ── */
+async function waInbound(request, env, ctx) {
+  let payload = {};
+  try { payload = await request.json(); } catch (_) {}
+  ctx.waitUntil((async () => {
+    try {
+      const v = ((payload.entry || [])[0] || {});
+      const ch = ((v.changes || [])[0] || {}).value || {};
+      const msg = (ch.messages || [])[0];
+      if (!msg || msg.type !== 'text') return;
+      const from = msg.from;
+      const allowed = waNums(env.WHATSAPP_ALLOWED || env.WHATSAPP_RECIPIENTS);
+      if (allowed.length && !allowed.some((a) => a.replace(/^\+/, '') === String(from).replace(/^\+/, ''))) {
+        await waSendText(env, from, 'This number is not authorised for ads reporting.');
+        return;
+      }
+      const q = (msg.text && msg.text.body || '').trim();
+      if (!q) return;
+      if (/^(digest|report|summary)$/i.test(q)) {
+        const p = await waPortfolio(env, 1); const d = waDigestBody(p);
+        await waSendText(env, from, `*Ads update · ${d.period}*\n${d.totals}\n\n${d.body}`);
+        return;
+      }
+      const answer = await waAgent(env, q);
+      await waSendText(env, from, answer);
+    } catch (e) {
+      try { const f = (((payload.entry || [])[0] || {}).changes || [])[0].value.messages[0].from;
+        await waSendText(env, f, '⚠️ Could not answer that: ' + String(e.message || e).slice(0, 200)); } catch (_) {}
+    }
+  })());
+  return new Response('OK', { status: 200 });   // Meta needs a fast 200
+}
+
+/* Small agent loop: Claude + the ad tools, answering in plain WhatsApp text. */
+async function waAgent(env, question) {
+  const key = env.ANTHROPIC_API_KEY || env.CLAUDE_KEY || env.CLAUDE_API_KEY || env.ANTHROPIC_KEY;
+  if (!key) return 'The ANTHROPIC_API_KEY secret is not set on the worker.';
+  const roster = await waClients(env);
+  const tools = [
+    { name: 'list_clients', description: 'List configured clients and their Meta ad account ids.',
+      input_schema: { type: 'object', properties: {}, required: [] } },
+    { name: 'query_meta_ads',
+      description: 'Meta Marketing API GET. path is relative to the ad account, e.g. "/insights" or "/campaigns". Omit clients to query EVERY client.',
+      input_schema: { type: 'object', properties: {
+        path: { type: 'string' }, params: { type: 'object' },
+        clients: { type: 'array', items: { type: 'string' }, description: 'Client names; omit for all' } },
+        required: ['path'] } },
+    { name: 'query_google_ads', description: 'Run a GAQL query against a Google Ads customer id.',
+      input_schema: { type: 'object', properties: { gaql: { type: 'string' }, customerId: { type: 'string' } }, required: ['gaql'] } },
+  ];
+  const today = new Date().toISOString().slice(0, 10);
+  const system = `You are the CMM Ads Intelligence assistant replying over WhatsApp. Today is ${today}.
+Answer in plain text for a phone: no markdown tables, no headings. Use short lines and "•" bullets, at most ~12 lines, under 1200 characters.
+Always state the date range and which clients the numbers cover. Compute rates from summed components (CTR = total clicks / total impressions). Never add spend across different currencies — group by currency and say so. If a client failed, say which.
+Clients available: ${roster.map((c) => c.name).join(', ') || 'none'}.`;
+  const messages = [{ role: 'user', content: question }];
+
+  for (let i = 0; i < 6; i++) {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: env.WHATSAPP_MODEL || 'claude-sonnet-5', max_tokens: 2048, system, tools, messages }),
+    });
+    const data = await res.json();
+    if (data.error) return 'API error: ' + (data.error.message || 'unknown');
+    const uses = (data.content || []).filter((b) => b.type === 'tool_use');
+    const text = (data.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
+    if (!uses.length) return text || 'No answer produced.';
+    messages.push({ role: 'assistant', content: data.content });
+
+    const results = await Promise.all(uses.map(async (u) => {
+      let out;
+      try {
+        if (u.name === 'list_clients') {
+          out = { clients: roster.map((c) => ({ name: c.name, meta: c.meta && c.meta.act })) };
+        } else if (u.name === 'query_meta_ads') {
+          const want = u.input.clients;
+          const targets = roster.filter((c) => c.meta && c.meta.act).filter((c) => !want || !want.length ||
+            want.some((w) => c.name.toLowerCase().includes(String(w).toLowerCase())));
+          const rows = [];
+          await Promise.all(targets.map(async (c) => {
+            const r = await metaAds({ adAccountId: c.meta.act, path: u.input.path, params: u.input.params || {} }, env);
+            const j = await r.json();
+            if (j.error) { rows.push({ _client: c.name, error: j.error }); return; }
+            (j.data || []).forEach((row) => rows.push(Object.assign({ _client: c.name }, row)));
+          }));
+          out = { clients_queried: targets.map((c) => c.name), total_rows: rows.length, rows };
+        } else if (u.name === 'query_google_ads') {
+          const r = await googleAds({ customerId: u.input.customerId || env.GOOGLE_ADS_CUSTOMER_ID, gaql: u.input.gaql }, env);
+          out = await r.json();
+        } else { out = { error: 'unknown tool' }; }
+      } catch (e) { out = { error: String(e.message || e) }; }
+      const s = JSON.stringify(out);
+      return { type: 'tool_result', tool_use_id: u.id, content: s.length > 60000 ? s.slice(0, 60000) + '…truncated' : s };
+    }));
+    messages.push({ role: 'user', content: results });
+  }
+  return 'That took too many steps — try a narrower question (one client or a shorter period).';
 }

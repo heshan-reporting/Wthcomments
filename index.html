@@ -1310,6 +1310,19 @@ textarea:focus,input:focus{outline:none}
         <div class="fhint">Auto-renews an expired access token, but only if the LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET secrets are also set on your Cloudflare Worker. Otherwise re-enter the access token every 60 days.</div>
         <input type="password" id="c-lirefresh" placeholder="Your LinkedIn refresh token">
       </div>
+      <div class="fdiv"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#25D366;margin-right:8px"></span>WhatsApp updates</div>
+      <div class="fhint" style="margin-bottom:10px">Configured with worker secrets (WHATSAPP_TOKEN, WHATSAPP_PHONE_ID, WHATSAPP_RECIPIENTS). Scheduled digests come from the worker's Cron Trigger; these buttons let you check the setup.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="cl-add" onclick="waPreview()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          Preview digest
+        </button>
+        <button class="cl-add" onclick="waSendTest()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          Send test message
+        </button>
+      </div>
+      <pre id="wa-out" style="display:none;margin-top:10px;background:rgba(0,0,0,.35);border:1px solid var(--border);border-radius:10px;padding:12px;font-family:var(--fmono);font-size:11px;color:var(--text-2);white-space:pre-wrap;max-height:240px;overflow:auto"></pre>
       <div class="fdiv">Advanced</div>
       <div class="fld">
         <label>Custom system prompt (optional)</label>
@@ -2351,6 +2364,29 @@ async function discoverClients(){
   say(total+' client'+(total===1?'':'s')+' in the roster'+(added?' ('+added+' new)':'')+
       (problems.length?' · not discoverable yet: '+problems.map(p=>p.split(':')[0]).join(', ')+
        ' — redeploy worker.js to enable':''), false);
+}
+
+
+/* ── WhatsApp helpers (all sends happen in the worker) ── */
+async function waCall(body){
+  const out=document.getElementById('wa-out');
+  out.style.display=''; out.textContent='Working…';
+  if(!cfg.wurl){ out.textContent='Set the Worker URL first.'; return; }
+  try{
+    const r=await fetch(cfg.wurl,{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':cfg.wsec||''},body:JSON.stringify(body)});
+    const t=await r.text();
+    let j; try{ j=JSON.parse(t); }catch(_){ out.textContent=t.slice(0,800); return; }
+    if(j.error){ out.textContent='⚠️ '+j.error+'\n\nIf this says "Unknown source", redeploy worker.js.'; return; }
+    if(j.preview){ out.textContent='Ads update · '+j.preview.period+'\n'+j.preview.totals+'\n\n'+j.preview.body+
+      '\n\n('+j.clients+' clients — this is exactly what the scheduled message will contain)'; return; }
+    out.textContent=JSON.stringify(j,null,1).slice(0,1200);
+  }catch(e){ out.textContent='Fetch failed: '+e.message; }
+}
+function waPreview(){ waCall({source:'whatsapp_digest',days:1,dryRun:true}); }
+function waSendTest(){
+  const to=prompt('Send a test WhatsApp message to which number? (E.164, e.g. +61400000000)\n\nLeave blank to use WHATSAPP_RECIPIENTS.\n\nNote: free-form text only arrives if that number messaged your WhatsApp number in the last 24h.');
+  if(to===null)return;
+  waCall(Object.assign({source:'whatsapp_test'}, to.trim()?{to:to.trim()}:{}));
 }
 
 /* ── clients manager UI ── */
