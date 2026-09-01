@@ -862,6 +862,29 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 .ap-state .ap-refresh{display:inline-flex;margin-top:14px}
 @media(max-width:700px){.ap-list{max-height:62vh}.ap-search{font-size:16px}}
 
+
+/* ── CLIENTS MANAGER ──────────────────────────────────────────────────────── */
+.cl-list{display:flex;flex-direction:column;gap:10px;margin-bottom:10px}
+.cl-row{border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--glass)}
+.cl-row .cl-top{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.cl-row .cl-name{flex:1;padding:8px 11px;border:1px solid var(--border);border-radius:9px;background:var(--glass);
+  color:var(--text);font-family:var(--fm);font-size:13px;font-weight:600;outline:none}
+.cl-row .cl-name:focus{border-color:var(--cyan)}
+.cl-del{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-3);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s}
+.cl-del:hover{color:var(--red);border-color:var(--red)}
+.cl-del svg{width:14px;height:14px}
+.cl-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+@media(max-width:700px){.cl-grid{grid-template-columns:1fr}}
+.cl-f label{display:block;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text-3);margin-bottom:4px}
+.cl-f input{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--glass);
+  color:var(--text);font-family:var(--fmono);font-size:12px;outline:none}
+.cl-f input:focus{border-color:var(--cyan)}
+.cl-add{display:inline-flex;align-items:center;gap:7px;padding:9px 15px;border-radius:10px;cursor:pointer;
+  border:1px dashed var(--border-hv);background:transparent;color:var(--text-2);font-family:var(--fm);font-size:13px;font-weight:600;transition:all .15s}
+.cl-add:hover{color:var(--text);border-color:var(--cyan);background:var(--glass)}
+.cl-add svg{width:14px;height:14px}
+
 /* ── KEYBOARD FOCUS (a11y) ────────────────────────────────────────────────── */
 button:focus-visible,.chip:focus-visible,a:focus-visible,.cv-item:focus-visible{
   outline:2px solid rgba(0,229,255,.55);outline-offset:2px}
@@ -1188,7 +1211,14 @@ textarea:focus,input:focus{outline:none}
       <button class="mx" onclick="closeMod('m-cfg')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div class="mbody">
-      <div class="fdiv" style="border-top:none;padding-top:0;margin-top:0"><span class="fdot" style="background:#4285F4"></span>Google Sign-In</div>
+      <div class="fdiv" style="border-top:none;padding-top:0;margin-top:0"><span class="fdot g"></span>Clients</div>
+      <div class="fhint" style="margin-bottom:10px">Each client is a named set of ad-account IDs. Your API credentials (worker secrets below) are shared across them, which is how agency access works. Questions like &ldquo;spend across all clients on Meta&rdquo; fan out over every client listed here.</div>
+      <div class="cl-list" id="cl-list"></div>
+      <button class="cl-add" onclick="addClient()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add client
+      </button>
+      <div class="fdiv"><span class="fdot" style="background:#4285F4"></span>Google Sign-In</div>
       <div class="fld">
         <label>Google Client ID</label>
         <div class="fhint">From Google Cloud Console &rarr; Credentials &rarr; OAuth 2.0 Client ID. Required for user sign-in. Stored globally (not per-user).</div>
@@ -1518,6 +1548,69 @@ function appendThink(){
   w.appendChild(el);scrollBot();return el;
 }
 
+
+/* ═══════════════ CLIENT REGISTRY ═══════════════════════════════════════════
+   One set of API credentials (worker secrets) can reach many ad accounts —
+   that is how agency access works — so a "client" is just a named bundle of
+   per-platform ACCOUNT IDs. Queries fan out across whichever clients the
+   question needs and every returned row is tagged with its client. */
+let clients=[];
+function clientsKey(){ return uKey('clients'); }
+function loadClients(){
+  try{ clients=JSON.parse(localStorage.getItem(clientsKey())||'[]'); }catch(e){ clients=[]; }
+  if(!Array.isArray(clients))clients=[];
+  /* migrate a single-account setup into a first client so nothing is lost */
+  if(!clients.length&&(cfg.gcid||cfg.fbid||cfg.ttadv||cfg.liacct)){
+    clients=[{ id:'c'+Date.now(), name:'Default client',
+      google:{cid:cfg.gcid||'',mgr:cfg.gmgr||''}, meta:{act:cfg.fbid||''},
+      tiktok:{adv:cfg.ttadv||''}, linkedin:{acct:cfg.liacct||''} }];
+    storeClients();
+  }
+  return clients;
+}
+function storeClients(){ try{ localStorage.setItem(clientsKey(),JSON.stringify(clients)); }catch(e){} }
+function clientHas(c,plat){
+  if(!c)return false;
+  if(plat==='google')return !!(c.google&&c.google.cid);
+  if(plat==='meta')return !!(c.meta&&c.meta.act);
+  if(plat==='tiktok')return !!(c.tiktok&&c.tiktok.adv);
+  if(plat==='linkedin')return !!(c.linkedin&&c.linkedin.acct);
+  return false;
+}
+/* Resolve the tool's `clients` argument to real client records.
+   Omitted / "all" / [] → every client configured for that platform. */
+function resolveClients(sel,plat){
+  const all=loadClients().filter(c=>clientHas(c,plat));
+  if(!sel||sel==='all'||(Array.isArray(sel)&&(!sel.length||sel.map(String).some(x=>x.toLowerCase()==='all'))))return all;
+  const want=(Array.isArray(sel)?sel:[sel]).map(x=>String(x).toLowerCase().trim());
+  const hit=all.filter(c=>want.some(w=>c.name.toLowerCase()===w||c.name.toLowerCase().includes(w)||String(c.id).toLowerCase()===w));
+  return hit.length?hit:all;
+}
+/* Run one fetch per client in parallel and return a single tagged payload. */
+async function fanOut(plat,sel,runner){
+  const targets=resolveClients(sel,plat);
+  if(!targets.length)return {error:'No clients configured for '+plat+' — add one in Configuration → Clients.'};
+  const settled=await Promise.all(targets.map(async c=>{
+    try{ const r=await runner(c); if(r.error)return {client:c.name,error:r.error};
+      let parsed=null; try{ parsed=JSON.parse(r.data); }catch(_){ }
+      return {client:c.name,data:parsed!=null?parsed:r.data}; }
+    catch(e){ return {client:c.name,error:String(e&&e.message||e)}; }
+  }));
+  const ok=settled.filter(x=>!x.error), bad=settled.filter(x=>x.error);
+  /* flatten rows and tag each with its client so totals can be grouped */
+  const rows=[];
+  ok.forEach(x=>{
+    const d=x.data;
+    const arr=Array.isArray(d)?d:(d&&(d.results||d.data||d.elements))||null;
+    if(Array.isArray(arr))arr.forEach(r=>rows.push(Object.assign({_client:x.client},r)));
+  });
+  const payload={ clients_queried:targets.map(c=>c.name), rows_by_client:ok, total_rows:rows.length };
+  if(rows.length)payload.rows=rows;
+  if(bad.length)payload.failed_clients=bad;
+  if(!ok.length)return {error:'All clients failed: '+bad.map(b=>b.client+': '+b.error).join(' | ')};
+  return {data:JSON.stringify(payload)};
+}
+
 // ── Worker calls ──────────────────────────────────────────────────────────────
 async function callWorker(body){
   if(!cfg.wurl)return{error:'No Worker URL — open Configuration'};
@@ -1539,46 +1632,57 @@ async function callWorker(body){
   }catch(e){return{error:'Fetch failed: '+e.message}}
 }
 
-async function googleQuery(gaql){
+async function googleQuery(gaql,sel){
   if(!cfg.wurl)return{error:'No Worker URL — open Configuration'};
-  if(!cfg.gcid)return{error:'No Google Customer ID — open Configuration'};
-  var body={source:'google_ads',customerId:cfg.gcid,gaql};
-  if(cfg.gmgr)body.managerId=cfg.gmgr;
-  return callWorker(body);
+  return fanOut('google',sel,function(c){
+    var body={source:'google_ads',customerId:c.google.cid,gaql};
+    var mgr=c.google.mgr||cfg.gmgr; if(mgr)body.managerId=mgr;
+    return callWorker(body);
+  });
 }
 
 // Tokens may live either on the worker (env secrets — preferred) or in this
 // app's Configuration. Pass the local token when we have one and let the
 // worker decide; never block the call just because no local token is stored.
-async function linkedinQuery(input){
+async function linkedinQuery(input,sel){
   if(!cfg.wurl)return{error:'No Worker URL — open Configuration'};
-  var body={source:'linkedin_ads'};
-  if(cfg.litoken)body.accessToken=cfg.litoken;
-  if(cfg.lirefresh)body.refreshToken=cfg.lirefresh;
-  if(cfg.liacct)body.accountId=cfg.liacct;
-  Object.keys(input).forEach(function(k){if(k!=='description')body[k]=input[k];});
-  return callWorker(body);
+  return fanOut('linkedin',sel,function(c){
+    var body={source:'linkedin_ads'};
+    if(cfg.litoken)body.accessToken=cfg.litoken;
+    if(cfg.lirefresh)body.refreshToken=cfg.lirefresh;
+    body.accountId=c.linkedin.acct;
+    Object.keys(input).forEach(function(k){if(k!=='description'&&k!=='clients')body[k]=input[k];});
+    return callWorker(body);
+  });
 }
 
-async function tiktokQuery(input){
+async function tiktokQuery(input,sel){
   if(!cfg.wurl)return{error:'No Worker URL — open Configuration'};
-  var body={source:'tiktok_ads'};
-  if(cfg.tttoken)body.accessToken=cfg.tttoken;
-  if(cfg.ttadv)body.advertiserId=cfg.ttadv;
-  Object.keys(input).forEach(function(k){if(k!=='description')body[k]=input[k];});
-  return callWorker(body);
+  return fanOut('tiktok',sel,function(c){
+    var body={source:'tiktok_ads'};
+    if(cfg.tttoken)body.accessToken=cfg.tttoken;
+    body.advertiserId=c.tiktok.adv;
+    Object.keys(input).forEach(function(k){if(k!=='description'&&k!=='clients')body[k]=input[k];});
+    return callWorker(body);
+  });
 }
 
-async function metaQuery(path,params,useAsync){
+async function metaQuery(path,params,useAsync,sel){
   if(!cfg.wurl)return{error:'No Worker URL — open Configuration'};
-  // Pass fbid if selected — worker falls back to META_AD_ACCOUNT_ID secret if not
-  var body={source:'meta_ads',path,params,useAsync:useAsync||false};
-  if(cfg.fbid)body.adAccountId=cfg.fbid;
-  return callWorker(body);
+  return fanOut('meta',sel,function(c){
+    var body={source:'meta_ads',path:path,params:params,useAsync:useAsync||false};
+    body.adAccountId=c.meta.act;
+    return callWorker(body);
+  });
 }
 
 // ── Claude tools ──────────────────────────────────────────────────────────────
 const TOOLS=[
+  {
+    name:'list_clients',
+    description:`List every configured client and which ad platforms each one has connected. Call this FIRST whenever the user says "all clients", "each client", "across clients", names a client you have not seen, or asks anything portfolio-wide — it tells you the exact client names to pass in the other tools' clients parameter.`,
+    input_schema:{type:'object',properties:{},required:[]}
+  },
   {
     name:'query_google_ads',
     description:`Execute a GAQL query against Google Ads (API v21, searchStream) via Cloudflare Worker. Use for any Google Ads data. ALWAYS call before answering — never guess.
@@ -1626,6 +1730,7 @@ Video placements:
 Daily trend:
   SELECT campaign.name, segments.date, metrics.cost_micros, metrics.clicks FROM campaign WHERE segments.date DURING LAST_30_DAYS ORDER BY segments.date`,
     input_schema:{type:'object',properties:{
+      clients:{type:'array',items:{type:'string'},description:'Which clients to query. Omit or use ["all"] for EVERY client that has this platform configured. Names are matched loosely.'},
       gaql:{type:'string',description:'A valid GAQL query string (see examples in the description).'},
       description:{type:'string',description:'One-line description shown in the UI.'}
     },required:['gaql','description']}
@@ -1671,6 +1776,7 @@ Key paths:
 For breakdowns (age/gender/device/placement), the worker auto-uses async jobs.
 For very large reports or 90+ day ranges, set useAsync: true.`,
     input_schema:{type:'object',properties:{
+      clients:{type:'array',items:{type:'string'},description:'Which clients to query. Omit or use ["all"] for EVERY client that has this platform configured. Names are matched loosely.'},
       path:{type:'string',description:`Graph API path relative to ad account. Examples:
   /insights                    account-level metrics
   /campaigns                   list all campaigns
@@ -1786,6 +1892,7 @@ EXAMPLES:
   Video performance: {action:"report", dimensions:["ad_id"], metrics:["spend","video_play_actions","video_watched_6s","video_views_p100","cpm"], description:"TikTok video metrics"}
   Daily trend: {action:"report", dimensions:["campaign_id","stat_time_day"], metrics:["spend","impressions","clicks"], description:"TikTok daily trend"}`,
     input_schema:{type:'object',properties:{
+      clients:{type:'array',items:{type:'string'},description:'Which clients to query. Omit or use ["all"] for EVERY client that has this platform configured. Names are matched loosely.'},
       action:{type:'string',description:'report | campaigns | adgroups | ads (default: report)'},
       dimensions:{type:'array',items:{type:'string'},description:'Report dimensions e.g. ["campaign_id"] or ["campaign_id","stat_time_day"]'},
       metrics:{type:'array',items:{type:'string'},description:'Metrics e.g. ["spend","impressions","clicks","ctr"]'},
@@ -1852,6 +1959,7 @@ EXAMPLES:
   List campaigns (with dates for relaunch): {action:"campaigns", description:"LinkedIn campaign list with dates"}
   Creative performance: {action:"analytics", pivot:"CREATIVE", metrics:["impressions","clicks","costInLocalCurrency","totalEngagements","videoViews"], description:"LinkedIn creative performance"}`,
     input_schema:{type:'object',properties:{
+      clients:{type:'array',items:{type:'string'},description:'Which clients to query. Omit or use ["all"] for EVERY client that has this platform configured. Names are matched loosely.'},
       action:{type:'string',description:'analytics | campaigns | campaign_groups | creatives | accounts'},
       pivot:{type:'string',description:'CAMPAIGN | CREATIVE | CAMPAIGN_GROUP | ACCOUNT | MEMBER_JOB_FUNCTION | MEMBER_SENIORITY | MEMBER_INDUSTRY | MEMBER_COMPANY_SIZE | MEMBER_COUNTRY | MEMBER_REGION | MEMBER_JOB_TITLE'},
       metrics:{type:'array',items:{type:'string'},description:'Max 20 metrics e.g. ["impressions","clicks","costInLocalCurrency","totalEngagements"]'},
@@ -1871,7 +1979,17 @@ const DEFAULT_SYS=`You are the CMM Ads Intelligence assistant, built by Curious 
 You are a senior performance marketing analyst with expert-level knowledge of Google Ads, Meta (Facebook/Instagram) Ads, TikTok Ads, and LinkedIn Ads.
 
 ## PLATFORMS
-You have FOUR tools: query_google_ads (Google Ads, GAQL via API v21), query_meta_ads (Meta), query_tiktok_ads (TikTok), and query_linkedin_ads (LinkedIn). Use the right tool per platform. For cross-platform questions, call all relevant tools and normalise currency, date range, and metric definitions before comparing. TikTok reports and LinkedIn analytics default to the last 30 days when you omit dates.
+You have FIVE tools: list_clients (who the clients are and what each has connected), query_google_ads (Google Ads, GAQL via API v21), query_meta_ads (Meta), query_tiktok_ads (TikTok), and query_linkedin_ads (LinkedIn). Every platform tool queries one, several, or ALL clients at once via its "clients" parameter. Use the right tool per platform. For cross-platform questions, call all relevant tools and normalise currency, date range, and metric definitions before comparing. TikTok reports and LinkedIn analytics default to the last 30 days when you omit dates.
+
+## MULTIPLE CLIENTS — READ THIS FIRST
+This workspace manages SEVERAL clients. Every platform tool takes a "clients" array.
+- Omit "clients" (or pass ["all"]) to query EVERY client that has that platform connected. A question like "August spend across all clients on Meta" is ONE query_meta_ads call with the date range and no clients filter — never one call per client typed out by hand.
+- Call list_clients first whenever the user says "all clients", "each client", "which client", names a client you have not seen, or asks anything portfolio-wide.
+- Pass specific names when the user names them, e.g. clients:["Acme","Northwind"].
+- Every returned row carries a "_client" field, and the payload includes "clients_queried", "rows_by_client" and "total_rows". "failed_clients" lists any client whose fetch failed.
+- ALWAYS state which clients the answer covers, and say plainly if any client failed or has no data — a portfolio total that silently omits a client is wrong.
+- For portfolio questions give the combined total FIRST, then a per-client breakdown table (client, spend, and the other metrics asked for), sorted by spend.
+- Never add spend across clients that report in different currencies without saying so; group by currency or convert explicitly and state the rate you used.
 
 ## ANALYTICAL RIGOR — NON-NEGOTIABLE
 - NEVER average ratios. Compute every rate/efficiency metric from summed components: CTR = Σclicks/Σimpressions, CPC = Σspend/Σclicks, CPA = Σspend/Σconversions, ROAS = Σrevenue/Σspend. Averaging per-campaign CTRs or CPCs gives wrong answers and is forbidden.
@@ -2057,19 +2175,27 @@ async function ask(userMsg){
         for(const t of uses){
           let r;
           try{
-          if(t.name==='query_google_ads'){
+          if(t.name==='list_clients'){
+            const cs=loadClients();
+            const card=appendToolCard('google','Clients & connected platforms',cs.length+' client'+(cs.length===1?'':'s'));
+            const out=cs.map(c=>({name:c.name,
+              platforms:['google','meta','tiktok','linkedin'].filter(p=>clientHas(c,p))}));
+            r={data:JSON.stringify({clients:out,total:out.length})};
+            card.ok(out.length+' clients');
+          } else if(t.name==='query_google_ads'){
             const{gaql,description}=t.input;
             status.phase('searching','Google Ads');
             const card=appendToolCard('google',description,gaql.slice(0,100)+(gaql.length>100?'…':''));
-            r=await googleQuery(gaql);
+            r=await googleQuery(gaql,t.input.clients);
             if(r.error){card.err('Failed')}
             else{
               // Parse to get row count if possible
               let rowInfo='data received';
               try{
                 const parsed=JSON.parse(r.data);
-                const rows=parsed.results?.length;
-                if(rows!==undefined)rowInfo=`${rows} rows`;
+                const rows=parsed.total_rows!==undefined?parsed.total_rows:parsed.results?.length;
+                const cl=parsed.clients_queried?` · ${parsed.clients_queried.length} client${parsed.clients_queried.length===1?'':'s'}`:'';
+                if(rows!==undefined)rowInfo=`${rows} rows${cl}`;
                 else rowInfo=`${(r.data.length/1024).toFixed(1)}kb`;
               }catch(_){rowInfo=`${(r.data.length/1024).toFixed(1)}kb`}
               card.ok(rowInfo);
@@ -2079,16 +2205,17 @@ async function ask(userMsg){
             const detail=`${path} · ${Object.entries(params||{}).slice(0,3).map(([k,v])=>`${k}=${v}`).join(', ')}`;
             status.phase('searching','Meta Ads');
             const card=appendToolCard('meta',description,detail,useAsync);
-            r=await metaQuery(path,params,useAsync);
+            r=await metaQuery(path,params,useAsync,t.input.clients);
             if(r.error){card.err('Failed')}
             else{
               let rowInfo='data received';
               try{
                 const parsed=JSON.parse(r.data);
-                const rows=parsed.total||parsed.data?.length;
+                const rows=parsed.total_rows!==undefined?parsed.total_rows:(parsed.total||parsed.data?.length);
                 const trunc=parsed.truncated?' (truncated)':'';
                 const asyncNote=parsed.async?' async':'';
-                if(rows!==undefined)rowInfo=`${rows} rows${asyncNote}${trunc}`;
+                const cl=parsed.clients_queried?` · ${parsed.clients_queried.length} client${parsed.clients_queried.length===1?'':'s'}`:'';
+                if(rows!==undefined)rowInfo=`${rows} rows${asyncNote}${trunc}${cl}`;
                 else rowInfo=`${(r.data.length/1024).toFixed(1)}kb`;
               }catch(_){rowInfo=`${(r.data.length/1024).toFixed(1)}kb`}
               card.ok(rowInfo);
@@ -2098,14 +2225,15 @@ async function ask(userMsg){
             const detail=`${inp.action||'report'} · ${(inp.dimensions||inp.metrics||[]).slice(0,3).join(', ')}`;
             status.phase('searching','TikTok Ads');
             const card=appendToolCard('tiktok',inp.description||'TikTok query',detail);
-            r=await tiktokQuery(inp);
+            r=await tiktokQuery(inp,inp.clients);
             if(r.error){card.err('Failed')}
             else{
               let rowInfo='data received';
               try{
                 const parsed=JSON.parse(r.data);
-                const rows=parsed.total||parsed.data?.length;
-                if(rows!==undefined)rowInfo=`${rows} rows`;
+                const rows=parsed.total_rows!==undefined?parsed.total_rows:(parsed.total||parsed.data?.length);
+                const cl=parsed.clients_queried?` · ${parsed.clients_queried.length} client${parsed.clients_queried.length===1?'':'s'}`:'';
+                if(rows!==undefined)rowInfo=`${rows} rows${cl}`;
                 else rowInfo=`${(r.data.length/1024).toFixed(1)}kb`;
               }catch(_){rowInfo=`${(r.data.length/1024).toFixed(1)}kb`}
               card.ok(rowInfo);
@@ -2115,14 +2243,15 @@ async function ask(userMsg){
             const detail=`${inp.action||'report'} · ${(inp.dimensions||inp.metrics||inp.fields||[]).slice(0,3).join(', ')}`;
             status.phase('searching','LinkedIn Ads');
             const card=appendToolCard('linkedin',inp.description||'LinkedIn query',detail);
-            r=await linkedinQuery(inp);
+            r=await linkedinQuery(inp,inp.clients);
             if(r.error){card.err('Failed')}
             else{
               let rowInfo='data received';
               try{
                 const parsed=JSON.parse(r.data);
-                const rows=parsed.total||parsed.elements?.length||parsed.data?.length;
-                if(rows!==undefined)rowInfo=`${rows} rows`;
+                const rows=parsed.total_rows!==undefined?parsed.total_rows:(parsed.total||parsed.elements?.length||parsed.data?.length);
+                const cl=parsed.clients_queried?` · ${parsed.clients_queried.length} client${parsed.clients_queried.length===1?'':'s'}`:'';
+                if(rows!==undefined)rowInfo=`${rows} rows${cl}`;
                 else rowInfo=`${(r.data.length/1024).toFixed(1)}kb`;
               }catch(_){rowInfo=`${(r.data.length/1024).toFixed(1)}kb`}
               card.ok(rowInfo);
@@ -2158,8 +2287,61 @@ function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrol
 function sendMsg(){const inp=document.getElementById('msg-inp');const msg=inp.value.trim();if(!msg||busy)return;inp.value='';inp.style.height='auto';appendMsg('user',msg);ask(msg)}
 function sendChip(el){appendMsg('user',el.textContent);ask(el.textContent)}
 
+
+/* ── clients manager UI ── */
+function renderClients(){
+  const box=document.getElementById('cl-list'); if(!box)return;
+  loadClients();
+  box.innerHTML='';
+  if(!clients.length){
+    const e=document.createElement('div');
+    e.className='fhint'; e.style.padding='10px 2px';
+    e.textContent='No clients yet — add one and give it the ad-account IDs you manage for them.';
+    box.appendChild(e);
+  }
+  clients.forEach((c,i)=>{
+    const row=document.createElement('div'); row.className='cl-row';
+    row.innerHTML=
+      '<div class="cl-top">'+
+        '<input class="cl-name" placeholder="Client name" data-i="'+i+'" data-k="name">'+
+        '<button class="cl-del" title="Remove client"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>'+
+      '</div>'+
+      '<div class="cl-grid">'+
+        '<div class="cl-f"><label>Google customer ID</label><input data-i="'+i+'" data-k="google.cid" placeholder="3219604662"></div>'+
+        '<div class="cl-f"><label>Google manager (MCC) ID</label><input data-i="'+i+'" data-k="google.mgr" placeholder="optional"></div>'+
+        '<div class="cl-f"><label>Meta ad account</label><input data-i="'+i+'" data-k="meta.act" placeholder="act_123456789"></div>'+
+        '<div class="cl-f"><label>TikTok advertiser ID</label><input data-i="'+i+'" data-k="tiktok.adv" placeholder="7123456789012345678"></div>'+
+        '<div class="cl-f"><label>LinkedIn account ID</label><input data-i="'+i+'" data-k="linkedin.acct" placeholder="123456789"></div>'+
+      '</div>';
+    row.querySelector('.cl-name').value=c.name||'';
+    row.querySelectorAll('input[data-k]').forEach(inp=>{
+      const k=inp.dataset.k;
+      if(k!=='name'){ const [a,b]=k.split('.'); inp.value=(c[a]&&c[a][b])||''; }
+      inp.addEventListener('input',()=>{
+        const cc=clients[i]; if(!cc)return;
+        if(k==='name')cc.name=inp.value;
+        else{ const [a,b]=k.split('.'); cc[a]=cc[a]||{}; cc[a][b]=inp.value.trim(); }
+        storeClients();
+      });
+    });
+    row.querySelector('.cl-del').addEventListener('click',()=>{
+      if(!confirm('Remove "'+(c.name||'this client')+'"?'))return;
+      clients.splice(i,1); storeClients(); renderClients(); refreshDots();
+    });
+    box.appendChild(row);
+  });
+}
+function addClient(){
+  loadClients();
+  clients.push({id:'c'+Date.now(),name:'',google:{cid:'',mgr:''},meta:{act:''},tiktok:{adv:''},linkedin:{acct:''}});
+  storeClients(); renderClients();
+  const inputs=document.querySelectorAll('#cl-list .cl-name');
+  if(inputs.length)inputs[inputs.length-1].focus();
+}
+
 function openSettings(){closeSidebar();
   loadCfg();
+  renderClients();
   document.getElementById('c-key').value=cfg.key||'';
   var _mdl=document.getElementById('c-model');if(_mdl)_mdl.value=cfg.model||'claude-sonnet-5';
   document.getElementById('c-wurl').value=cfg.wurl||'';

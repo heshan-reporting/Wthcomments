@@ -412,6 +412,8 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,tr
       <div class="mk">CMM</div>
       <div><b>Ads Portal</b><span>Curious Minds Media</span></div>
     </div>
+    <div class="sec">Clients</div>
+    <nav id="clientNav"></nav>
     <div class="sec">Platforms</div>
     <nav id="platNav"></nav>
     <div class="sec">Top campaigns</div>
@@ -563,7 +565,7 @@ const PLATFORMS = {
 };
 const DEFAULT_WURL='https://ads-proxy.heshan-998.workers.dev/';
 let cfg={}, user=null;
-let state={ range:'30', platform:'all', q:'', demo:false, rows:[], daily:{}, prevTotals:null, errs:{}, loading:false, loaded:false };
+let state={ range:'30', platform:'all', client:'all', q:'', demo:false, rows:[], daily:{}, prevTotals:null, errs:{}, loading:false, loaded:false };
 
 function loadCfg(){
   try{ user=JSON.parse(localStorage.getItem('cmm_user')||'null'); }catch(e){ user=null; }
@@ -622,6 +624,34 @@ function rangeDates(){
   return { start, end, days:Math.round((end-start)/864e5)+1 };
 }
 
+
+/* ═════════════════════ clients ═════════════════════
+   Shares the chat app's registry: a client is a named bundle of
+   per-platform account IDs. Every fetch fans out across them and each
+   row is tagged, so the portal totals cover the whole portfolio. */
+let clients=[];
+function loadClients(){
+  const uid=user?user.id:'guest';
+  try{ clients=JSON.parse(localStorage.getItem('cmm_'+uid+'_clients')||'[]'); }catch(e){ clients=[]; }
+  if(!Array.isArray(clients))clients=[];
+  if(!clients.length&&(cfg.gcid||cfg.fbid||cfg.ttadv||cfg.liacct)){
+    clients=[{id:'c0',name:'Default client',google:{cid:cfg.gcid,mgr:cfg.gmgr},
+      meta:{act:cfg.fbid},tiktok:{adv:cfg.ttadv},linkedin:{acct:cfg.liacct}}];
+  }
+  return clients;
+}
+function clientHas(c,p){
+  if(p==='google')return !!(c.google&&c.google.cid);
+  if(p==='meta')return !!(c.meta&&c.meta.act);
+  if(p==='tiktok')return !!(c.tiktok&&c.tiktok.adv);
+  if(p==='linkedin')return !!(c.linkedin&&c.linkedin.acct);
+  return false;
+}
+function activeClients(p){
+  const all=loadClients().filter(c=>clientHas(c,p));
+  return state.client==='all'?all:all.filter(c=>c.id===state.client);
+}
+
 /* ═════════════════════ worker calls ═════════════════════ */
 async function wcall(body){
   const r=await fetch(cfg.wurl,{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':cfg.wsec||''},body:JSON.stringify(body)});
@@ -633,14 +663,13 @@ async function wcall(body){
 }
 
 /* Each fetcher returns {rows:[...], daily:{date:{spend}}, error?} normalized. */
-async function fetchGoogle(rg){
-  if(!cfg.gcid)return null;
+async function fetchGoogle(rg,cl){
   const between=`segments.date BETWEEN '${dayStr(rg.start)}' AND '${dayStr(rg.end)}'`;
-  const body=(gaql)=>({source:'google_ads',customerId:cfg.gcid,gaql,...(cfg.gmgr?{managerId:cfg.gmgr}:{})});
+  const body=(gaql)=>({source:'google_ads',customerId:cl.google.cid,gaql,...((cl.google.mgr||cfg.gmgr)?{managerId:cl.google.mgr||cfg.gmgr}:{})});
   const sum=await wcall(body(`SELECT campaign.id, campaign.name, campaign.status, campaign_budget.amount_micros, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions FROM campaign WHERE ${between} ORDER BY metrics.cost_micros DESC`));
   const day=await wcall(body(`SELECT segments.date, metrics.cost_micros FROM campaign WHERE ${between}`));
   const rows=(sum.results||[]).map(r=>({
-    platform:'google', id:String(r.campaign.id), name:r.campaign.name, status:r.campaign.status,
+    client:cl.name, platform:'google', id:String(r.campaign.id), name:r.campaign.name, status:r.campaign.status,
     dailyBudget:r.campaignBudget?Number(r.campaignBudget.amountMicros||0)/1e6:null, lifetimeBudget:null,
     spend:Number(r.metrics.costMicros||0)/1e6, impressions:Number(r.metrics.impressions||0),
     clicks:Number(r.metrics.clicks||0), conversions:Number(r.metrics.conversions||0), currency:'USD',
@@ -650,16 +679,16 @@ async function fetchGoogle(rg){
   return {rows,daily};
 }
 
-async function fetchMeta(rg){
+async function fetchMeta(rg,cl){
   const tr=JSON.stringify({since:dayStr(rg.start),until:dayStr(rg.end)});
-  const camps=await wcall({source:'meta_ads',path:'/campaigns',params:{fields:'id,name,status,effective_status,daily_budget,lifetime_budget,start_time,stop_time',limit:100},...(cfg.fbid?{adAccountId:cfg.fbid}:{})});
-  const ins=await wcall({source:'meta_ads',path:'/insights',params:{level:'campaign',fields:'campaign_id,campaign_name,spend,impressions,clicks,actions,account_currency',time_range:tr,limit:200},...(cfg.fbid?{adAccountId:cfg.fbid}:{})});
-  const day=await wcall({source:'meta_ads',path:'/insights',params:{level:'account',fields:'spend',time_range:tr,time_increment:1,limit:200},...(cfg.fbid?{adAccountId:cfg.fbid}:{})});
+  const camps=await wcall({source:'meta_ads',path:'/campaigns',params:{fields:'id,name,status,effective_status,daily_budget,lifetime_budget,start_time,stop_time',limit:100},adAccountId:cl.meta.act});
+  const ins=await wcall({source:'meta_ads',path:'/insights',params:{level:'campaign',fields:'campaign_id,campaign_name,spend,impressions,clicks,actions,account_currency',time_range:tr,limit:200},adAccountId:cl.meta.act});
+  const day=await wcall({source:'meta_ads',path:'/insights',params:{level:'account',fields:'spend',time_range:tr,time_increment:1,limit:200},adAccountId:cl.meta.act});
   const budget={}; (camps.data||[]).forEach(c=>{ budget[c.id]={ daily:c.daily_budget?Number(c.daily_budget)/100:null, life:c.lifetime_budget?Number(c.lifetime_budget)/100:null, status:c.effective_status||c.status, start:c.start_time, stop:c.stop_time }; });
   const rows=(ins.data||[]).map(r=>{
     const b=budget[r.campaign_id]||{};
     const conv=(r.actions||[]).filter(a=>['purchase','lead','offsite_conversion.fb_pixel_purchase','offsite_conversion.fb_pixel_lead','complete_registration'].includes(a.action_type)).reduce((s,a)=>s+Number(a.value||0),0);
-    return { platform:'meta', id:String(r.campaign_id), name:r.campaign_name, status:b.status||'UNKNOWN',
+    return { client:cl.name, platform:'meta', id:String(r.campaign_id), name:r.campaign_name, status:b.status||'UNKNOWN',
       dailyBudget:b.daily, lifetimeBudget:b.life, budgetStart:b.start, budgetStop:b.stop,
       spend:Number(r.spend||0), impressions:Number(r.impressions||0), clicks:Number(r.clicks||0),
       conversions:conv, currency:r.account_currency||'USD' };
@@ -668,16 +697,15 @@ async function fetchMeta(rg){
   return {rows,daily};
 }
 
-async function fetchTikTok(rg){
-  if(!cfg.tttoken&&!state.workerHasTT)return null;
-  const base={source:'tiktok_ads',...(cfg.tttoken?{accessToken:cfg.tttoken}:{}),...(cfg.ttadv?{advertiserId:cfg.ttadv}:{})};
+async function fetchTikTok(rg,cl){
+  const base={source:'tiktok_ads',...(cfg.tttoken?{accessToken:cfg.tttoken}:{}),advertiserId:cl.tiktok.adv};
   const camps=await wcall({...base,action:'campaigns',fields:['campaign_id','campaign_name','operation_status','budget','budget_mode']});
   const rep=await wcall({...base,action:'report',dimensions:['campaign_id'],metrics:['spend','impressions','clicks'],startDate:dayStr(rg.start),endDate:dayStr(rg.end),pageSize:200});
   const day=await wcall({...base,action:'report',dimensions:['advertiser_id','stat_time_day'],metrics:['spend'],startDate:dayStr(rg.start),endDate:dayStr(rg.end),pageSize:200});
   const meta={}; (camps.data||[]).forEach(c=>{ meta[c.campaign_id]={name:c.campaign_name,status:c.operation_status,budget:c.budget_mode==='BUDGET_MODE_DAY'?Number(c.budget):null,life:c.budget_mode==='BUDGET_MODE_TOTAL'?Number(c.budget):null}; });
   const rows=(rep.data||[]).map(r=>{
     const id=r.dimensions?r.dimensions.campaign_id:r.campaign_id; const m=r.metrics||r; const mm=meta[id]||{};
-    return { platform:'tiktok', id:String(id), name:mm.name||('Campaign '+id), status:mm.status||'UNKNOWN',
+    return { client:cl.name, platform:'tiktok', id:String(id), name:mm.name||('Campaign '+id), status:mm.status||'UNKNOWN',
       dailyBudget:mm.budget, lifetimeBudget:mm.life, spend:Number(m.spend||0), impressions:Number(m.impressions||0),
       clicks:Number(m.clicks||0), conversions:null, currency:'USD' };
   });
@@ -685,9 +713,8 @@ async function fetchTikTok(rg){
   return {rows,daily};
 }
 
-async function fetchLinkedIn(rg){
-  if(!cfg.litoken&&!cfg.liacct&&!state.workerHasLI)return null;
-  const base={source:'linkedin_ads',...(cfg.litoken?{accessToken:cfg.litoken}:{}),...(cfg.lirefresh?{refreshToken:cfg.lirefresh}:{}),...(cfg.liacct?{accountId:cfg.liacct}:{})};
+async function fetchLinkedIn(rg,cl){
+  const base={source:'linkedin_ads',...(cfg.litoken?{accessToken:cfg.litoken}:{}),...(cfg.lirefresh?{refreshToken:cfg.lirefresh}:{}),accountId:cl.linkedin.acct};
   const camps=await wcall({...base,action:'campaigns',count:100});
   const ana=await wcall({...base,action:'analytics',pivot:'CAMPAIGN',startDate:dayStr(rg.start),endDate:dayStr(rg.end),metrics:['impressions','clicks','costInLocalCurrency','externalWebsiteConversions']});
   const day=await wcall({...base,action:'analytics',pivot:'ACCOUNT',timeGranularity:'DAILY',startDate:dayStr(rg.start),endDate:dayStr(rg.end),metrics:['costInLocalCurrency']});
@@ -697,7 +724,7 @@ async function fetchLinkedIn(rg){
   const rows=(ana.data||[]).map(r=>{
     const urn=(r.pivotValues&&r.pivotValues[0])||''; const id=urn.replace(/^urn:li:sponsoredCampaign:/,'');
     const mm=meta[id]||{};
-    return { platform:'linkedin', id, name:mm.name||('Campaign '+id), status:mm.status||'UNKNOWN',
+    return { client:cl.name, platform:'linkedin', id, name:mm.name||('Campaign '+id), status:mm.status||'UNKNOWN',
       dailyBudget:mm.daily, lifetimeBudget:mm.life, spend:Number(r.costInLocalCurrency||0),
       impressions:Number(r.impressions||0), clicks:Number(r.clicks||0),
       conversions:Number(r.externalWebsiteConversions||0), currency:mm.currency||'USD' };
@@ -731,7 +758,7 @@ function demoData(rg){
         imp+=ds*(90+rand()*160); clk+=ds*(1.4+rand()*2.2);
       }
       const conv=p==='tiktok'?null:Math.round(clk*(0.02+rand()*0.06));
-      rows.push({ platform:p,id:'demo_'+p+'_'+i,name:n,status:i===3?'PAUSED':'ACTIVE',
+      rows.push({ client:['Acme Corp','Northwind','Contoso'][i%3], platform:p,id:'demo_'+p+'_'+i,name:n,status:i===3?'PAUSED':'ACTIVE',
         dailyBudget:budget,lifetimeBudget:null,spend,impressions:Math.round(imp),clicks:Math.round(clk),
         conversions:conv,currency:'USD' });
     });
@@ -753,10 +780,21 @@ async function loadData(){
   }else{
     const jobs={ google:fetchGoogle, meta:fetchMeta, tiktok:fetchTikTok, linkedin:fetchLinkedIn };
     const rows=[],daily={};
-    await Promise.all(Object.entries(jobs).map(async ([p,fn])=>{
-      try{ const r=await fn(rg); if(r){ rows.push(...r.rows); daily[p]=r.daily; } }
-      catch(e){ state.errs[p]=e.message; }
-    }));
+    const tasks=[];
+    Object.entries(jobs).forEach(([p,fn])=>{
+      activeClients(p).forEach(cl=>{
+        tasks.push((async()=>{
+          try{
+            const r=await fn(rg,cl);
+            if(r){ rows.push(...r.rows);
+              daily[p]=daily[p]||{};
+              /* sum each client's daily spend into the platform series */
+              Object.entries(r.daily||{}).forEach(([d,v])=>{ daily[p][d]=(daily[p][d]||0)+v; }); }
+          }catch(e){ state.errs[p+'·'+cl.name]=e.message; }
+        })());
+      });
+    });
+    await Promise.all(tasks);
     state.rows=rows; state.daily=daily;
   }
   state.loading=false; state.loaded=true;
@@ -768,6 +806,8 @@ function refresh(){ loadData(); }
 
 function visibleRows(){
   let rs=state.platform==='all'?state.rows:state.rows.filter(r=>r.platform===state.platform);
+  if(state.client!=='all'){ const c=(loadClients().find(x=>x.id===state.client)||{}).name;
+    if(c)rs=rs.filter(r=>r.client===c); }
   if(state.q)rs=rs.filter(r=>String(r.name).toLowerCase().includes(state.q));
   return rs;
 }
@@ -937,7 +977,8 @@ function countUp(node,target,fmtFn,dur){
 function render(){
   const rg=rangeDates(); const rows=visibleRows(); const t=totals(rows);
   const cur=(rows[0]&&rows[0].currency)||'USD';
-  document.getElementById('rangeLbl').textContent='· '+(state.range==='mtd'?'month to date':'last '+state.range+' days');
+  const cn=state.client==='all'?('all clients ('+loadClients().length+')'):((loadClients().find(c=>c.id===state.client)||{}).name||'client');
+  document.getElementById('rangeLbl').textContent='· '+(state.range==='mtd'?'month to date':'last '+state.range+' days')+' · '+cn;
   document.getElementById('demoTag').style.display=state.demo?'':'none';
   document.getElementById('demoLbl').textContent=state.demo?'Exit demo':'Demo data';
 
@@ -1028,9 +1069,10 @@ function render(){
 
   /* platform fetch errors */
   const pe=document.getElementById('platErrs'); pe.innerHTML='';
-  Object.entries(state.errs).forEach(([p,msg])=>{
+  Object.entries(state.errs).forEach(([k,msg])=>{
+    const [p,cl]=k.split('·');
     const d=document.createElement('div'); d.className='err-note';
-    d.textContent=PLATFORMS[p].label+': '+msg; pe.appendChild(d); });
+    d.textContent=(PLATFORMS[p]?PLATFORMS[p].label:p)+(cl?' · '+cl:'')+': '+msg; pe.appendChild(d); });
 
   accRender();
   cfRender();
@@ -1048,7 +1090,7 @@ function render(){
 
   /* alerts */
   renderAlerts(rg);
-  renderNav(); renderSideCamps();
+  renderClientNav(); renderNav(); renderSideCamps();
 }
 
 function renderAlerts(rg){
@@ -1078,6 +1120,29 @@ function renderAlerts(rg){
     d.innerHTML=`<div class="aic">${icons[a.icon]}</div><div class="at">${a.t}<span class="am"></span></div>`;
     d.querySelector('.am').textContent=a.m;
     box.appendChild(d);
+  });
+}
+
+
+function renderClientNav(){
+  const nav=document.getElementById('clientNav'); if(!nav)return;
+  nav.innerHTML='';
+  const list=loadClients();
+  if(!list.length){ nav.innerHTML='<div class="empty-note" style="padding:4px 10px">No clients configured.</div>'; return; }
+  const mk=(id,label,count)=>{
+    const b=document.createElement('button'); b.className='nav-btn'+(state.client===id?' on':'');
+    const d=document.createElement('span'); d.className='pdot';
+    d.style.background=id==='all'?'linear-gradient(135deg,#22d3ee,#a78bfa 60%,#f472b6)':'var(--tx3)';
+    b.appendChild(d);
+    b.appendChild(document.createTextNode(label));
+    if(count!=null){ const c=document.createElement('span'); c.className='cnt'; c.textContent=count; b.appendChild(c); }
+    b.addEventListener('click',()=>{ state.client=id; toggleSide(false); loadData(); });
+    nav.appendChild(b);
+  };
+  mk('all','All clients',list.length);
+  list.forEach(c=>{
+    const n=state.rows.filter(r=>r.client===c.name).length;
+    mk(c.id,c.name||'Unnamed',n||null);
   });
 }
 
