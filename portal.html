@@ -565,7 +565,7 @@ const PLATFORMS = {
 };
 const DEFAULT_WURL='https://ads-proxy.heshan-998.workers.dev/';
 let cfg={}, user=null;
-let state={ range:'30', platform:'all', client:'all', q:'', demo:false, rows:[], daily:{}, prevTotals:null, errs:{}, loading:false, loaded:false };
+let state={ range:'30', platform:'all', client:'all', q:'', platStatus:{}, demo:false, rows:[], daily:{}, prevTotals:null, errs:{}, loading:false, loaded:false };
 
 function loadCfg(){
   try{ user=JSON.parse(localStorage.getItem('cmm_user')||'null'); }catch(e){ user=null; }
@@ -781,8 +781,12 @@ async function loadData(){
     const jobs={ google:fetchGoogle, meta:fetchMeta, tiktok:fetchTikTok, linkedin:fetchLinkedIn };
     const rows=[],daily={};
     const tasks=[];
+    state.platStatus={};
     Object.entries(jobs).forEach(([p,fn])=>{
-      activeClients(p).forEach(cl=>{
+      const act=activeClients(p);
+      if(!act.length){ state.platStatus[p]='no account configured'; return; }
+      state.platStatus[p]='ok';
+      act.forEach(cl=>{
         tasks.push((async()=>{
           try{
             const r=await fn(rg,cl);
@@ -1069,6 +1073,13 @@ function render(){
 
   /* platform fetch errors */
   const pe=document.getElementById('platErrs'); pe.innerHTML='';
+  const missing=Object.entries(state.platStatus||{}).filter(([,v])=>v==='no account configured').map(([k])=>PLATFORMS[k].label);
+  if(missing.length&&!state.demo){
+    const d=document.createElement('div'); d.className='err-note'; d.style.color='var(--tx3)';
+    d.textContent='Not connected for the selected client(s): '+missing.join(', ')+
+      ' — add their account IDs in the chat app under Configuration → Clients.';
+    pe.appendChild(d);
+  }
   Object.entries(state.errs).forEach(([k,msg])=>{
     const [p,cl]=k.split('·');
     const d=document.createElement('div'); d.className='err-note';
@@ -1156,11 +1167,19 @@ function renderNav(){
     const c=document.createElement('span'); c.className='cnt'; c.textContent=count; b.appendChild(c);
     b.addEventListener('click',()=>{ state.platform=key; toggleSide(false); render(); });
     nav.appendChild(b);
+    return b;
   };
   mk('all','All platforms',null,state.rows.length);
+  /* always list every platform so a missing channel is visible, not silent */
   Object.entries(PLATFORMS).forEach(([k,p])=>{
     const n=state.rows.filter(r=>r.platform===k).length;
-    if(n||state.errs[k])mk(k,p.label,p.hex,n);
+    const st=(state.platStatus||{})[k];
+    const failed=Object.keys(state.errs||{}).some(e=>e.split('·')[0]===k);
+    const label=n?n:(failed?'!':(st==='no account configured'?'—':0));
+    const b=mk(k,p.label,p.hex,label);
+    if(!n&&b){ b.style.opacity=.55;
+      b.title=failed?'Fetch failed — see the note under Campaigns'
+             :(st==='no account configured'?'No account for this platform on the selected client(s) — add one in Configuration → Clients':'No data in this range'); }
   });
 }
 function renderSideCamps(){

@@ -1214,10 +1214,17 @@ textarea:focus,input:focus{outline:none}
       <div class="fdiv" style="border-top:none;padding-top:0;margin-top:0"><span class="fdot g"></span>Clients</div>
       <div class="fhint" style="margin-bottom:10px">Each client is a named set of ad-account IDs. Your API credentials (worker secrets below) are shared across them, which is how agency access works. Questions like &ldquo;spend across all clients on Meta&rdquo; fan out over every client listed here.</div>
       <div class="cl-list" id="cl-list"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="cl-add" id="cl-discover" onclick="discoverClients()" style="border-style:solid;border-color:var(--cmm-bd);color:var(--cyan)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 21l-4.35-4.35"/><circle cx="11" cy="11" r="7"/></svg>
+        Discover clients from connected accounts
+      </button>
       <button class="cl-add" onclick="addClient()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         Add client
       </button>
+      </div>
+      <div class="fhint" id="cl-discover-note" style="margin-top:8px"></div>
       <div class="fdiv"><span class="fdot" style="background:#4285F4"></span>Google Sign-In</div>
       <div class="fld">
         <label>Google Client ID</label>
@@ -2287,6 +2294,64 @@ function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrol
 function sendMsg(){const inp=document.getElementById('msg-inp');const msg=inp.value.trim();if(!msg||busy)return;inp.value='';inp.style.height='auto';appendMsg('user',msg);ask(msg)}
 function sendChip(el){appendMsg('user',el.textContent);ask(el.textContent)}
 
+
+
+/* Turn every ad account the credentials can reach into a client.
+   Meta works with the currently deployed worker; the other platforms
+   need the newer worker (they return a clear message until then). */
+async function discoverClients(){
+  const btn=document.getElementById('cl-discover');
+  const note=document.getElementById('cl-discover-note');
+  const say=(t,bad)=>{ if(note){ note.textContent=t; note.style.color=bad?'var(--red)':'var(--text-3)'; } };
+  if(!cfg.wurl){ say('Set the Worker URL below first.',true); return; }
+  if(btn){ btn.disabled=true; btn.style.opacity=.6; }
+  say('Looking up connected accounts…');
+  loadClients();
+  const before=clients.length;
+  let added=0, problems=[];
+
+  const call=async(body)=>{
+    const r=await fetch(cfg.wurl,{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':cfg.wsec||''},body:JSON.stringify(body)});
+    const t=await r.text();
+    if(!r.ok)throw new Error('Worker '+r.status);
+    const j=JSON.parse(t); if(j.error)throw new Error(j.error);
+    return j;
+  };
+  /* find a client already holding this account id, else one with a matching
+     name, else create — so re-running never duplicates rows */
+  const upsert=(plat,key,id,name)=>{
+    if(!id)return;
+    let c=clients.find(x=>x[plat]&&x[plat][key]===id);
+    if(!c)c=clients.find(x=>(x.name||'').toLowerCase()===String(name||'').toLowerCase());
+    if(!c){ c={id:'c'+Date.now()+Math.random().toString(36).slice(2,6),name:name||id,
+      google:{cid:'',mgr:''},meta:{act:''},tiktok:{adv:''},linkedin:{acct:''}};
+      clients.push(c); added++; }
+    c[plat]=c[plat]||{}; c[plat][key]=id;
+    /* adopt the real account name over a placeholder from migration */
+    if(!c.name||c.name==='Default client'||c.name===id)c.name=name||id;
+  };
+
+  try{ const d=await call({source:'meta_accounts'});
+    (d.accounts||[]).forEach(a=>upsert('meta','act',a.id,a.name));
+  }catch(e){ problems.push('Meta: '+e.message); }
+
+  for(const [src,plat,key] of [['google_accounts','google','cid'],['tiktok_accounts','tiktok','adv'],['linkedin_accounts','linkedin','acct']]){
+    try{ const d=await call({source:src});
+      (d.accounts||[]).forEach(a=>upsert(plat,key,a.id,a.name));
+    }catch(e){ /* older worker: unknown source — not fatal */ problems.push(plat+': '+e.message); }
+  }
+
+  /* drop the placeholder migrated client if discovery replaced it */
+  if(before===1&&clients.length>1&&clients[0].name==='Default client'&&!clients[0].meta.act&&!clients[0].google.cid)
+    clients.splice(0,1);
+
+  storeClients(); renderClients(); refreshDots();
+  if(btn){ btn.disabled=false; btn.style.opacity=1; }
+  const total=clients.length;
+  say(total+' client'+(total===1?'':'s')+' in the roster'+(added?' ('+added+' new)':'')+
+      (problems.length?' · not discoverable yet: '+problems.map(p=>p.split(':')[0]).join(', ')+
+       ' — redeploy worker.js to enable':''), false);
+}
 
 /* ── clients manager UI ── */
 function renderClients(){

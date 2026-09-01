@@ -4,7 +4,8 @@
  * Handles the data sources the app sends:
  *   google_ads      { customerId, gaql, managerId? }
  *   meta_ads        { path, params, useAsync?, adAccountId? }
- *   meta_accounts   {}                    <-- the fix for "Unknown source"
+ *   meta_accounts / google_accounts / tiktok_accounts / linkedin_accounts
+ *                   {}   <-- account discovery for the client roster
  *   tiktok_ads      { path?, advertiserId?, ... }   (optional)
  *   linkedin_ads    { ... }                          (optional stub)
  *
@@ -63,6 +64,9 @@ export default {
       if (source === 'google_ads')    return await googleAds(body, env);
       if (source === 'meta_ads')      return await metaAds(body, env);
       if (source === 'meta_accounts') return await metaAccounts(env);
+      if (source === 'google_accounts')   return await googleAccounts(env);
+      if (source === 'tiktok_accounts')   return await tiktokAccounts(body, env);
+      if (source === 'linkedin_accounts') return await linkedinAccounts(body, env);
       if (source === 'tiktok_ads')    return await tiktokAds(body, env);
       if (source === 'linkedin_ads')  return await linkedinAds(body, env);
       return json({ error: 'Unknown source: ' + source }, 400);
@@ -112,6 +116,79 @@ async function metaAccounts(env) {
     currency: a.currency,
     timezone: a.timezone_name,
   }));
+  return json({ accounts });
+}
+
+
+/* ── ACCOUNT DISCOVERY: every account the credentials can reach ─────
+   Used by the app's "Discover clients" button to build the client roster. */
+async function googleAccounts(env) {
+  const dev = env.GOOGLE_ADS_DEVELOPER_TOKEN;
+  if (!dev) return json({ error: 'GOOGLE_ADS_DEVELOPER_TOKEN secret is not set' });
+  const tok = await googleAccessToken(env);
+  if (tok.error) return json({ error: tok.error });
+  const headers = { Authorization: 'Bearer ' + tok.token, 'developer-token': dev, 'Content-Type': 'application/json' };
+  const mgr = String(env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || '').replace(/-/g, '');
+
+  // With a manager account, list the clients under it (names included).
+  if (mgr) {
+    headers['login-customer-id'] = mgr;
+    const q = `SELECT customer_client.id, customer_client.descriptive_name, customer_client.manager, customer_client.status
+               FROM customer_client WHERE customer_client.status = 'ENABLED'`;
+    const res = await fetch(`https://googleads.googleapis.com/${GOOGLE_V}/customers/${mgr}/googleAds:searchStream`,
+      { method: 'POST', headers, body: JSON.stringify({ query: q }) });
+    const text = await res.text();
+    if (res.ok) {
+      let batches; try { batches = JSON.parse(text); } catch (_) { batches = []; }
+      const accounts = [];
+      (Array.isArray(batches) ? batches : [batches]).forEach((b) => (b.results || []).forEach((r) => {
+        const c = r.customerClient || {};
+        if (c.manager) return;                       // skip manager nodes, keep real accounts
+        accounts.push({ id: String(c.id), name: c.descriptiveName || String(c.id) });
+      }));
+      return json({ accounts });
+    }
+  }
+  // No manager configured — fall back to the directly accessible customers.
+  const r = await fetch(`https://googleads.googleapis.com/${GOOGLE_V}/customers:listAccessibleCustomers`, { headers });
+  const t = await r.text();
+  if (!r.ok) return json({ error: 'Google ' + r.status + ': ' + t.slice(0, 300) });
+  let d; try { d = JSON.parse(t); } catch (_) { return json({ error: 'Bad Google response' }); }
+  const accounts = (d.resourceNames || []).map((rn) => {
+    const id = String(rn).split('/').pop();
+    return { id, name: id };
+  });
+  return json({ accounts });
+}
+
+async function tiktokAccounts(body, env) {
+  const token = env.TIKTOK_ACCESS_TOKEN || body.accessToken;
+  if (!token) return json({ error: 'TikTok not configured (set TIKTOK_ACCESS_TOKEN)' });
+  const appId = env.TIKTOK_APP_ID, secret = env.TIKTOK_APP_SECRET;
+  if (!appId || !secret) return json({ error: 'Set TIKTOK_APP_ID and TIKTOK_APP_SECRET to list advertisers' });
+  const base = 'https://business-api.tiktok.com/open_api/v1.3';
+  const auth = await (await fetch(`${base}/oauth2/advertiser/get/?app_id=${encodeURIComponent(appId)}&secret=${encodeURIComponent(secret)}`,
+    { headers: { 'Access-Token': token } })).json();
+  if (auth.code !== 0) return json({ error: 'TikTok ' + auth.code + ': ' + (auth.message || 'error') });
+  const ids = ((auth.data && auth.data.list) || []).map((a) => a.advertiser_id);
+  if (!ids.length) return json({ accounts: [] });
+  const info = await (await fetch(`${base}/advertiser/info/?advertiser_ids=${encodeURIComponent(JSON.stringify(ids))}`,
+    { headers: { 'Access-Token': token } })).json();
+  const names = {};
+  if (info.code === 0) ((info.data && info.data.list) || []).forEach((a) => { names[a.advertiser_id] = a.name || a.advertiser_name; });
+  return json({ accounts: ids.map((id) => ({ id: String(id), name: names[id] || String(id) })) });
+}
+
+async function linkedinAccounts(body, env) {
+  const token = env.LINKEDIN_ACCESS_TOKEN || body.accessToken;
+  if (!token) return json({ error: 'LinkedIn not configured (set LINKEDIN_ACCESS_TOKEN)' });
+  const r = await fetch('https://api.linkedin.com/rest/adAccounts?q=search&pageSize=100', {
+    headers: { Authorization: 'Bearer ' + token, 'LinkedIn-Version': env.LINKEDIN_VERSION || '202506', 'X-Restli-Protocol-Version': '2.0.0' },
+  });
+  const t = await r.text();
+  let d; try { d = JSON.parse(t); } catch (_) { d = null; }
+  if (!r.ok) return json({ error: 'LinkedIn ' + r.status + ': ' + ((d && d.message) || t.slice(0, 200)) });
+  const accounts = ((d && d.elements) || []).map((a) => ({ id: String(a.id), name: a.name || String(a.id) }));
   return json({ accounts });
 }
 
