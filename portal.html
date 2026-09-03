@@ -27,10 +27,14 @@
   --grid:rgba(36,28,21,.09);--axis:rgba(36,28,21,.22);--surface:#efe7da;
   --shadow:0 30px 90px rgba(60,44,30,.28),0 2px 8px rgba(60,44,30,.10);
   --fm:'DM Sans',system-ui,-apple-system,sans-serif;--fmono:'DM Mono',ui-monospace,monospace;
-  /* platform series */
-  --s-google:#22d3ee;--s-meta:#a78bfa;--s-tiktok:#f472b6;--s-linkedin:#fbbf24;--s-pinterest:#ef4444;--s-reddit:#f97316;
+  /* platform series — light set, validated for CVD + normal-vision
+     separation on the cream surface (dataviz palette checks all pass) */
+  --s-google:#0891b2;--s-meta:#7c3aed;--s-tiktok:#c2185b;--s-linkedin:#b58900;--s-pinterest:#991b1b;--s-reddit:#ea7317;
   --st-good:#12a150;--st-warn:#d98700;--st-serious:#e2703a;--st-critical:#d64545;
 }
+.csv-btn{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-family:inherit;font-size:11px;font-weight:600;
+  padding:5px 11px;border-radius:9px;border:1px solid var(--brd2);background:var(--chip);color:var(--tx2);cursor:pointer}
+.csv-btn:hover{background:var(--chiphv);color:var(--tx)}
 /* ── WARM DARK ── */
 :root[data-theme="dark"]{
   --tx:#f2ece4;--tx2:rgba(242,236,228,.58);--tx3:rgba(242,236,228,.40);
@@ -45,6 +49,9 @@
   --grid:rgba(255,255,255,.07);--axis:rgba(255,255,255,.20);--surface:#231a13;
   --shadow:0 30px 90px rgba(0,0,0,.55),0 2px 8px rgba(0,0,0,.35);
   --st-good:#3ddc84;--st-warn:#fbbf24;--st-serious:#f59e6b;--st-critical:#ff7a7a;
+  /* bright series for the dark surface — CVD + normal separation validated;
+     the out-of-band lightness is relieved by the legend, end-dots and table */
+  --s-google:#22d3ee;--s-meta:#a78bfa;--s-tiktok:#f472b6;--s-linkedin:#fcd34d;--s-pinterest:#e23636;--s-reddit:#fb923c;
 }
 html,body{height:100%}
 body{font-family:var(--fm);color:var(--tx);background:#241c15;-webkit-font-smoothing:antialiased;overflow-x:hidden}
@@ -508,7 +515,12 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,tr
       <section class="tiles" id="tiles"></section>
 
       <section class="card tbl-card anim" style="--i:5" id="tblCard">
-        <h3>Campaigns <span id="campCount" style="color:var(--tx3);font-weight:400"></span></h3>
+        <h3 style="display:flex;align-items:center;gap:8px">Campaigns <span id="campCount" style="color:var(--tx3);font-weight:400"></span>
+          <button class="csv-btn" type="button" onclick="exportCsv()" title="Download the visible campaigns as CSV">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export CSV
+          </button>
+        </h3>
         <div id="platErrs"></div>
         <div class="tbl-scroll">
           <table class="ct" aria-label="Campaign performance table">
@@ -565,9 +577,15 @@ const PLATFORMS = {
   pinterest:{ label:'Pinterest Ads',color:'var(--s-pinterest)',hex:'#b91c1c' },
   reddit:   { label:'Reddit Ads',   color:'var(--s-reddit)',   hex:'#c2410c' },
 };
+/* One source of truth for series colour: the theme's CSS token. Everything
+   (chart lines, donut, dots, glow, art) reads this so both themes match. */
+function platHex(p){
+  const v=getComputedStyle(document.documentElement).getPropertyValue('--s-'+p).trim();
+  return v||(PLATFORMS[p]&&PLATFORMS[p].hex)||'#888888';
+}
 const DEFAULT_WURL='https://ads-proxy.heshan-998.workers.dev/';
 let cfg={}, user=null;
-let state={ range:'30', platform:'all', client:'all', q:'', platStatus:{}, demo:false, rows:[], daily:{}, prevTotals:null, errs:{}, loading:false, loaded:false };
+let state={ range:'30', platform:'all', client:'all', q:'', platStatus:{}, demo:false, rows:[], daily:{}, prevSpend:{}, errs:{}, loading:false, loaded:false };
 
 function loadCfg(){
   try{ user=JSON.parse(localStorage.getItem('cmm_user')||'null'); }catch(e){ user=null; }
@@ -623,7 +641,33 @@ function rangeDates(){
   let start;
   if(state.range==='mtd'){ start=new Date(Date.UTC(end.getUTCFullYear(),end.getUTCMonth(),1)); }
   else{ start=new Date(end.getTime()-(Number(state.range)-1)*864e5); }
-  return { start, end, days:Math.round((end-start)/864e5)+1 };
+  const days=Math.round((end-start)/864e5)+1;
+  /* the daily fetches cover the window before this one too, so the
+     "vs previous period" delta compares equal-length real windows */
+  return { start, end, days, prevStart:new Date(start.getTime()-days*864e5) };
+}
+
+/* ── deep links: range/platform/client/search live in the URL hash ── */
+function readHash(){
+  try{
+    const h=new URLSearchParams(location.hash.slice(1));
+    if(h.get('r'))state.range=h.get('r');
+    if(h.get('p')&&(h.get('p')==='all'||PLATFORMS[h.get('p')]))state.platform=h.get('p');
+    if(h.get('c'))state.client=h.get('c');
+    if(h.get('q')){ state.q=h.get('q').toLowerCase(); const qi=document.getElementById('q'); if(qi)qi.value=h.get('q'); }
+    document.querySelectorAll('#rangePills .pill').forEach(p=>p.classList.toggle('on',p.dataset.r===state.range));
+  }catch(e){}
+}
+function syncHash(){
+  try{
+    const h=new URLSearchParams();
+    if(state.range!=='30')h.set('r',state.range);
+    if(state.platform!=='all')h.set('p',state.platform);
+    if(state.client!=='all')h.set('c',state.client);
+    if(state.q)h.set('q',state.q);
+    const s=h.toString();
+    history.replaceState(null,'',s?'#'+s:location.pathname+location.search);
+  }catch(e){}
 }
 
 
@@ -671,13 +715,15 @@ async function wcall(body){
 async function fetchGoogle(rg,cl){
   const between=`segments.date BETWEEN '${dayStr(rg.start)}' AND '${dayStr(rg.end)}'`;
   const body=(gaql)=>({source:'google_ads',customerId:cl.google.cid,gaql,...((cl.google.mgr||cfg.gmgr)?{managerId:cl.google.mgr||cfg.gmgr}:{})});
-  const sum=await wcall(body(`SELECT campaign.id, campaign.name, campaign.status, campaign_budget.amount_micros, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions FROM campaign WHERE ${between} ORDER BY metrics.cost_micros DESC`));
-  const day=await wcall(body(`SELECT segments.date, metrics.cost_micros FROM campaign WHERE ${between}`));
+  const between2=`segments.date BETWEEN '${dayStr(rg.prevStart)}' AND '${dayStr(rg.end)}'`;
+  const sum=await wcall(body(`SELECT campaign.id, campaign.name, campaign.status, campaign_budget.amount_micros, customer.currency_code, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions FROM campaign WHERE ${between} ORDER BY metrics.cost_micros DESC`));
+  const day=await wcall(body(`SELECT segments.date, metrics.cost_micros FROM campaign WHERE ${between2}`));
   const rows=(sum.results||[]).map(r=>({
     client:cl.name, platform:'google', id:String(r.campaign.id), name:r.campaign.name, status:r.campaign.status,
     dailyBudget:r.campaignBudget?Number(r.campaignBudget.amountMicros||0)/1e6:null, lifetimeBudget:null,
     spend:Number(r.metrics.costMicros||0)/1e6, impressions:Number(r.metrics.impressions||0),
-    clicks:Number(r.metrics.clicks||0), conversions:Number(r.metrics.conversions||0), currency:'USD',
+    clicks:Number(r.metrics.clicks||0), conversions:Number(r.metrics.conversions||0),
+    currency:(r.customer&&r.customer.currencyCode)||'USD',
   }));
   const daily={};
   (day.results||[]).forEach(r=>{ const d=r.segments.date; daily[d]=(daily[d]||0)+Number(r.metrics.costMicros||0)/1e6; });
@@ -688,7 +734,8 @@ async function fetchMeta(rg,cl){
   const tr=JSON.stringify({since:dayStr(rg.start),until:dayStr(rg.end)});
   const camps=await wcall({source:'meta_ads',path:'/campaigns',params:{fields:'id,name,status,effective_status,daily_budget,lifetime_budget,start_time,stop_time',limit:100},adAccountId:cl.meta.act});
   const ins=await wcall({source:'meta_ads',path:'/insights',params:{level:'campaign',fields:'campaign_id,campaign_name,spend,impressions,clicks,actions,account_currency',time_range:tr,limit:200},adAccountId:cl.meta.act});
-  const day=await wcall({source:'meta_ads',path:'/insights',params:{level:'account',fields:'spend',time_range:tr,time_increment:1,limit:200},adAccountId:cl.meta.act});
+  const tr2=JSON.stringify({since:dayStr(rg.prevStart),until:dayStr(rg.end)});
+  const day=await wcall({source:'meta_ads',path:'/insights',params:{level:'account',fields:'spend',time_range:tr2,time_increment:1,limit:200},adAccountId:cl.meta.act});
   const budget={}; (camps.data||[]).forEach(c=>{ budget[c.id]={ daily:c.daily_budget?Number(c.daily_budget)/100:null, life:c.lifetime_budget?Number(c.lifetime_budget)/100:null, status:c.effective_status||c.status, start:c.start_time, stop:c.stop_time }; });
   const rows=(ins.data||[]).map(r=>{
     const b=budget[r.campaign_id]||{};
@@ -706,7 +753,7 @@ async function fetchTikTok(rg,cl){
   const base={source:'tiktok_ads',...(cfg.tttoken?{accessToken:cfg.tttoken}:{}),advertiserId:cl.tiktok.adv};
   const camps=await wcall({...base,action:'campaigns',fields:['campaign_id','campaign_name','operation_status','budget','budget_mode']});
   const rep=await wcall({...base,action:'report',dimensions:['campaign_id'],metrics:['spend','impressions','clicks'],startDate:dayStr(rg.start),endDate:dayStr(rg.end),pageSize:200});
-  const day=await wcall({...base,action:'report',dimensions:['advertiser_id','stat_time_day'],metrics:['spend'],startDate:dayStr(rg.start),endDate:dayStr(rg.end),pageSize:200});
+  const day=await wcall({...base,action:'report',dimensions:['advertiser_id','stat_time_day'],metrics:['spend'],startDate:dayStr(rg.prevStart),endDate:dayStr(rg.end),pageSize:200});
   const meta={}; (camps.data||[]).forEach(c=>{ meta[c.campaign_id]={name:c.campaign_name,status:c.operation_status,budget:c.budget_mode==='BUDGET_MODE_DAY'?Number(c.budget):null,life:c.budget_mode==='BUDGET_MODE_TOTAL'?Number(c.budget):null}; });
   const rows=(rep.data||[]).map(r=>{
     const id=r.dimensions?r.dimensions.campaign_id:r.campaign_id; const m=r.metrics||r; const mm=meta[id]||{};
@@ -722,7 +769,7 @@ async function fetchLinkedIn(rg,cl){
   const base={source:'linkedin_ads',...(cfg.litoken?{accessToken:cfg.litoken}:{}),...(cfg.lirefresh?{refreshToken:cfg.lirefresh}:{}),accountId:cl.linkedin.acct};
   const camps=await wcall({...base,action:'campaigns',count:100});
   const ana=await wcall({...base,action:'analytics',pivot:'CAMPAIGN',startDate:dayStr(rg.start),endDate:dayStr(rg.end),metrics:['impressions','clicks','costInLocalCurrency','externalWebsiteConversions']});
-  const day=await wcall({...base,action:'analytics',pivot:'ACCOUNT',timeGranularity:'DAILY',startDate:dayStr(rg.start),endDate:dayStr(rg.end),metrics:['costInLocalCurrency']});
+  const day=await wcall({...base,action:'analytics',pivot:'ACCOUNT',timeGranularity:'DAILY',startDate:dayStr(rg.prevStart),endDate:dayStr(rg.end),metrics:['costInLocalCurrency']});
   const meta={}; (camps.data||[]).forEach(c=>{ meta[String(c.id)]={name:c.name,status:c.status,
     daily:c.dailyBudget?Number(c.dailyBudget.amount):null, life:c.totalBudget?Number(c.totalBudget.amount):null,
     currency:(c.dailyBudget&&c.dailyBudget.currencyCode)||(c.totalBudget&&c.totalBudget.currencyCode)||'USD'}; });
@@ -746,7 +793,7 @@ async function fetchPinterest(rg,cl){
   const base={source:'pinterest_ads',...(cfg.pttoken?{accessToken:cfg.pttoken}:{}),...(cfg.ptrefresh?{refreshToken:cfg.ptrefresh}:{}),accountId:cl.pinterest.acct};
   const camps=await wcall({...base,action:'campaigns'});
   const ana=await wcall({...base,action:'analytics',level:'campaign',startDate:dayStr(rg.start),endDate:dayStr(rg.end)});
-  const day=await wcall({...base,action:'analytics',granularity:'DAY',startDate:dayStr(rg.start),endDate:dayStr(rg.end)});
+  const day=await wcall({...base,action:'analytics',granularity:'DAY',startDate:dayStr(rg.prevStart),endDate:dayStr(rg.end)});
   /* spend caps arrive in micro-currency */
   const meta={}; (camps.data||[]).forEach(c=>{ meta[String(c.id)]={name:c.name,status:c.status,
     daily:c.daily_spend_cap?Number(c.daily_spend_cap)/1e6:null, life:c.lifetime_spend_cap?Number(c.lifetime_spend_cap)/1e6:null}; });
@@ -765,7 +812,7 @@ async function fetchReddit(rg,cl){
   const base={source:'reddit_ads',...(cfg.rdtoken?{accessToken:cfg.rdtoken}:{}),...(cfg.rdrefresh?{refreshToken:cfg.rdrefresh}:{}),accountId:cl.reddit.acct};
   const camps=await wcall({...base,action:'campaigns'});
   const rep=await wcall({...base,action:'report',breakdowns:['campaign_id'],fields:['spend','impressions','clicks'],startDate:dayStr(rg.start),endDate:dayStr(rg.end)});
-  const day=await wcall({...base,action:'report',breakdowns:['date'],fields:['spend'],startDate:dayStr(rg.start),endDate:dayStr(rg.end)});
+  const day=await wcall({...base,action:'report',breakdowns:['date'],fields:['spend'],startDate:dayStr(rg.prevStart),endDate:dayStr(rg.end)});
   /* spend caps arrive in micro-currency; report spend is pre-divided by the worker */
   const meta={}; (camps.data||[]).forEach(c=>{ meta[String(c.id)]={name:c.name,status:c.configured_status||c.effective_status,
     daily:c.spend_cap?Number(c.spend_cap)/1e6:null, life:c.total_spend_cap?Number(c.total_spend_cap)/1e6:null}; });
@@ -806,7 +853,12 @@ function demoData(rg){
         conversions:conv,currency:'USD' });
     });
   });
-  return {rows,dailyByPlat};
+  const prevByPlat={};
+  Object.keys(dailyByPlat).forEach(p=>{
+    const cur=Object.values(dailyByPlat[p]).reduce((a,b)=>a+b,0);
+    prevByPlat[p]=cur*(0.78+rand()*0.4);
+  });
+  return {rows,dailyByPlat,prevByPlat};
 }
 
 /* ═════════════════════ load & aggregate ═════════════════════ */
@@ -819,7 +871,7 @@ async function loadData(){
 
   if(state.demo){
     const d=demoData(rg);
-    state.rows=d.rows; state.daily=d.dailyByPlat;
+    state.rows=d.rows; state.daily=d.dailyByPlat; state.prevSpend=d.prevByPlat||{};
   }else{
     const jobs={ google:fetchGoogle, meta:fetchMeta, tiktok:fetchTikTok, linkedin:fetchLinkedIn, pinterest:fetchPinterest, reddit:fetchReddit };
     const rows=[],daily={};
@@ -842,7 +894,12 @@ async function loadData(){
       });
     });
     await Promise.all(tasks);
-    state.rows=rows; state.daily=daily;
+    /* the daily series covers 2× the window — split off the earlier half
+       into per-platform previous-period totals for the real delta */
+    const cut=dayStr(rg.start), prevSpend={};
+    Object.keys(daily).forEach(p=>{ Object.keys(daily[p]).forEach(d=>{
+      if(d<cut){ prevSpend[p]=(prevSpend[p]||0)+daily[p][d]; delete daily[p][d]; } }); });
+    state.rows=rows; state.daily=daily; state.prevSpend=prevSpend;
   }
   state.loading=false; state.loaded=true;
   document.getElementById('refreshBtn').classList.remove('spin');
@@ -859,12 +916,22 @@ function visibleRows(){
   return rs;
 }
 function totals(rows){
-  const t={spend:0,impressions:0,clicks:0,conversions:0,convKnown:false};
-  rows.forEach(r=>{ t.spend+=r.spend||0; t.impressions+=r.impressions||0; t.clicks+=r.clicks||0;
-    if(r.conversions!=null){ t.conversions+=r.conversions; t.convKnown=true; } });
+  /* Money totals are grouped by currency — a USD+AUD portfolio must never
+     show one blended number. Displayed money metrics use the dominant
+     currency's own components; the rest are surfaced as a note. */
+  const t={spend:0,impressions:0,clicks:0,conversions:0,convKnown:false,byCurrency:{}};
+  rows.forEach(r=>{ const cu=r.currency||'USD';
+    const b=t.byCurrency[cu]=t.byCurrency[cu]||{spend:0,clicks:0,conversions:0,convKnown:false};
+    b.spend+=r.spend||0; b.clicks+=r.clicks||0;
+    t.spend+=r.spend||0; t.impressions+=r.impressions||0; t.clicks+=r.clicks||0;
+    if(r.conversions!=null){ t.conversions+=r.conversions; t.convKnown=true; b.conversions+=r.conversions; b.convKnown=true; } });
+  const curs=Object.keys(t.byCurrency).sort((a,b)=>t.byCurrency[b].spend-t.byCurrency[a].spend);
+  t.mixed=curs.length>1; t.domCur=curs[0]||'USD'; t.otherCurs=curs.slice(1);
+  const dom=t.byCurrency[t.domCur]||{spend:0,clicks:0,conversions:0,convKnown:false};
+  t.spendDom=dom.spend;
   t.ctr=t.impressions>0?t.clicks/t.impressions*100:null;      /* Σclicks/Σimpr — never averaged */
-  t.cpc=t.clicks>0?t.spend/t.clicks:null;
-  t.cpa=t.convKnown&&t.conversions>0?t.spend/t.conversions:null;
+  t.cpc=dom.clicks>0?dom.spend/dom.clicks:null;               /* dominant currency only */
+  t.cpa=dom.convKnown&&dom.conversions>0?dom.spend/dom.conversions:null;
   return t;
 }
 
@@ -1023,26 +1090,29 @@ function countUp(node,target,fmtFn,dur){
 /* ═════════════════════ render ═════════════════════ */
 function render(){
   const rg=rangeDates(); const rows=visibleRows(); const t=totals(rows);
-  const cur=(rows[0]&&rows[0].currency)||'USD';
+  const cur=t.domCur;
   const cn=state.client==='all'?('all clients ('+loadClients().length+')'):((loadClients().find(c=>c.id===state.client)||{}).name||'client');
   document.getElementById('rangeLbl').textContent='· '+(state.range==='mtd'?'month to date':'last '+state.range+' days')+' · '+cn;
   document.getElementById('demoTag').style.display=state.demo?'':'none';
   document.getElementById('demoLbl').textContent=state.demo?'Exit demo':'Demo data';
+  const otherCurNote=t.mixed?t.otherCurs.map(c=>fmtMoney(t.byCurrency[c].spend,c)).join(' · '):'';
 
-  /* hero */
-  countUp(document.getElementById('heroNum'),t.spend,v=>fmtMoney(v,cur),950);
-  const hd=document.getElementById('heroDelta');
-  if(state.prevTotals&&state.prevTotals.spend>0){
-    const ch=(t.spend-state.prevTotals.spend)/state.prevTotals.spend*100;
-    hd.className='delta '+(ch>=0?'up':'down');
-    hd.textContent=(ch>=0?'▲ +':'▼ ')+ch.toFixed(1)+'% vs previous period';
-  }else{ hd.className='delta na'; hd.textContent=rows.length?rows.length+' campaigns':'—'; }
-
-  /* hero chart: per-platform daily series over the range */
+  /* hero chart series (computed first — the delta uses the same platform set) */
   const labels=[]; for(let d=0;d<rg.days;d++)labels.push(dayStr(new Date(rg.start.getTime()+d*864e5)));
   const plats=state.platform==='all'?Object.keys(PLATFORMS).filter(p=>state.daily[p]&&Object.keys(state.daily[p]).length):[state.platform];
+
+  /* hero — dominant currency only; other currencies are named, never blended */
+  countUp(document.getElementById('heroNum'),t.spendDom,v=>fmtMoney(v,cur),950);
+  const hd=document.getElementById('heroDelta');
+  const curWin=plats.reduce((s,p)=>s+Object.values(state.daily[p]||{}).reduce((a,b)=>a+b,0),0);
+  const prevWin=plats.reduce((s,p)=>s+((state.prevSpend||{})[p]||0),0);
+  if(state.client==='all'&&prevWin>0&&curWin>0){
+    const ch=(curWin-prevWin)/prevWin*100;
+    hd.className='delta '+(ch>=0?'up':'down');
+    hd.textContent=(ch>=0?'▲ +':'▼ ')+ch.toFixed(1)+'% vs previous '+rg.days+' days'+(t.mixed?' · + '+otherCurNote+' (not summed)':'');
+  }else{ hd.className='delta na'; hd.textContent=(rows.length?rows.length+' campaigns':'—')+(t.mixed?' · + '+otherCurNote+' (not summed)':''); }
   const series=plats.map(p=>({name:PLATFORMS[p].label,data:labels.map(d=>(state.daily[p]&&state.daily[p][d])||0)}));
-  const colors=plats.map(p=>PLATFORMS[p].hex);
+  const colors=plats.map(p=>platHex(p));
   const lg=document.getElementById('heroLegend'); lg.innerHTML='';
   if(series.length>1)plats.forEach((p,i)=>{ const li=document.createElement('span'); li.className='li';
     const k=document.createElement('span'); k.className='key'; k.style.background=colors[i]; li.appendChild(k);
@@ -1053,11 +1123,12 @@ function render(){
   /* tiles */
   const spendSeries=labels.map(d=>plats.reduce((s,p)=>s+((state.daily[p]&&state.daily[p][d])||0),0));
   const tiles=[
-    {cls:'t-yellow',label:'Spend',v:t.spend,f:v=>fmtMoney(v,cur),spark:spendSeries,sc:'#fab219'},
+    {cls:'t-yellow',label:'Spend'+(t.mixed?' ('+cur+')':''),v:t.spendDom,f:v=>fmtMoney(v,cur),spark:spendSeries,sc:'#fab219',
+     note:t.mixed?'+ '+otherCurNote+' — different currencies, never summed':null},
     {cls:'t-blue',label:'Impressions',v:t.impressions,f:compact,spark:null,sc:'#0891b2'},
     {cls:'t-purple',label:'Clicks',v:t.clicks,f:compact,spark:null,sc:'#7c3aed'},
     {cls:'t-green',label:'CTR',v:t.ctr,f:pct,note:'Σclicks ÷ Σimpressions'},
-    {cls:'t-orange',label:'Avg. CPC',v:t.cpc,f:v=>fmtMoney(v,cur),note:'Σspend ÷ Σclicks'},
+    {cls:'t-orange',label:'Avg. CPC',v:t.cpc,f:v=>fmtMoney(v,cur),note:'Σspend ÷ Σclicks'+(t.mixed?' · '+cur+' only':'')},
     {cls:'t-pink',label:t.convKnown?'Conversions':'Conversions*',v:t.convKnown?t.conversions:null,f:compact,note:t.convKnown?null:'not reported by all platforms'},
   ];
   const tw=document.getElementById('tiles'); tw.innerHTML='';
@@ -1085,7 +1156,7 @@ function render(){
     const ctr=r.impressions>0?r.clicks/r.impressions*100:null;
     const cpc=r.clicks>0?r.spend/r.clicks:null;
     tr.innerHTML=`
-      <td><div class="nm"><span class="pdot" style="background:${PLATFORMS[r.platform].hex}"></span><span></span></div></td>
+      <td><div class="nm"><span class="pdot" style="background:${platHex(r.platform)}"></span><span></span></div></td>
       <td><span class="spill ${stCls}"></span></td>
       <td class="num"></td><td class="num"></td>
       <td><div class="pace ${pc.status}">
@@ -1132,19 +1203,47 @@ function render(){
   cfRender();
 
   /* donut + legend */
-  const parts=Object.keys(PLATFORMS).map(p=>({name:PLATFORMS[p].label,color:PLATFORMS[p].hex,
+  const parts=Object.keys(PLATFORMS).map(p=>({name:PLATFORMS[p].label,color:platHex(p),
     value:state.rows.filter(r=>r.platform===p).reduce((s,r)=>s+r.spend,0)})).filter(p=>p.value>0);
   donutChart(document.getElementById('donut'),parts,parts.reduce((s,p)=>s+p.value,0));
   const dl=document.getElementById('donutLegend'); dl.innerHTML='';
+  /* with mixed currencies a blended $ figure would lie — show shares instead */
+  const donutMixed=new Set(state.rows.map(r=>r.currency||'USD')).size>1;
+  const donutTotal=parts.reduce((s,p)=>s+p.value,0);
   parts.forEach(p=>{ const li=document.createElement('div'); li.className='li';
     const sw=document.createElement('span'); sw.className='sw2'; sw.style.background=p.color; li.appendChild(sw);
     const nm=document.createElement('span'); nm.textContent=p.name.replace(' Ads',''); li.appendChild(nm);
-    const lv=document.createElement('span'); lv.className='lv'; lv.textContent=fmtMoney(p.value); li.appendChild(lv);
+    const lv=document.createElement('span'); lv.className='lv';
+    lv.textContent=donutMixed?(donutTotal>0?(p.value/donutTotal*100).toFixed(0)+'%':'—'):fmtMoney(p.value);
+    if(donutMixed)lv.title='Share of combined spend — currencies differ, so absolute totals are not shown';
+    li.appendChild(lv);
     dl.appendChild(li); });
 
   /* alerts */
   renderAlerts(rg);
   renderClientNav(); renderNav(); renderSideCamps();
+  syncHash();
+}
+
+/* ── CSV export of the visible campaign set ── */
+function exportCsv(){
+  const rows=visibleRows(); if(!rows.length)return;
+  const rg=rangeDates();
+  const q=(v)=>{ v=v==null?'':String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  const head=['client','platform','campaign','status','currency','daily_budget','spend','impressions','clicks','ctr_pct','cpc','conversions','pacing_pct_of_expected'];
+  const lines=[head.join(',')];
+  [...rows].sort((a,b)=>b.spend-a.spend).forEach(r=>{
+    const pc=pacing(r,rg);
+    const ctr=r.impressions>0?(r.clicks/r.impressions*100).toFixed(3):'';
+    const cpc=r.clicks>0?(r.spend/r.clicks).toFixed(2):'';
+    lines.push([r.client,PLATFORMS[r.platform].label,r.name,r.status,r.currency,
+      r.dailyBudget!=null?r.dailyBudget:'',(r.spend||0).toFixed(2),r.impressions||0,r.clicks||0,
+      ctr,cpc,r.conversions!=null?r.conversions:'',pc.pctv!=null?pc.pctv.toFixed(0):''].map(q).join(','));
+  });
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([lines.join('\n')],{type:'text/csv'}));
+  a.download='cmm-campaigns-'+dayStr(rg.start)+'_'+dayStr(rg.end)+'.csv';
+  a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
 }
 
 function renderAlerts(rg){
@@ -1161,6 +1260,21 @@ function renderAlerts(rg){
     else if(pc.status==='warn'&&pc.pctv>110)alerts.push({sev:'warn',icon:'over',t:`<b>${esc(r.name)}</b> slightly over pace`,m:`${pc.pctv.toFixed(0)}% of expected — watch today's delivery`});
     else if(pc.status==='serious')alerts.push({sev:'serious',icon:'under',t:`<b>${esc(r.name)}</b> is underdelivering`,m:`only ${pc.pctv.toFixed(0)}% of expected spend while Active`});
     if(r.conversions===0&&r.spend>0&&r.clicks>=50)alerts.push({sev:'warn',icon:'noconv',t:`<b>${esc(r.name)}</b>: spend with zero conversions`,m:`${fmtMoney(r.spend,r.currency)} spent, ${compact(r.clicks)} clicks, 0 recorded conversions`});
+  });
+  /* spend anomalies: latest complete day vs the trailing-7-day baseline.
+     A spike or collapse in one platform's daily spend is the thing a human
+     would want flagged before the client notices. */
+  Object.keys(state.daily||{}).forEach(p=>{
+    const days=Object.keys(state.daily[p]).sort();
+    if(days.length<8)return;                         /* need a baseline */
+    const last=days[days.length-1], lastV=state.daily[p][last];
+    const base=days.slice(-8,-1).map(d=>state.daily[p][d]);
+    const avg=base.reduce((a,b)=>a+b,0)/base.length;
+    if(avg<5)return;                                 /* too small to judge */
+    const ratio=lastV/avg;
+    const lbl=PLATFORMS[p].label;
+    if(ratio>=1.8)alerts.push({sev:'serious',icon:'over',t:`<b>${esc(lbl)}</b> daily spend spiked`,m:`${last}: ${fmtMoney(lastV)} vs ${fmtMoney(avg)}/day trailing-7 average (×${ratio.toFixed(1)})`});
+    else if(ratio<=0.35)alerts.push({sev:'serious',icon:'under',t:`<b>${esc(lbl)}</b> daily spend collapsed`,m:`${last}: ${fmtMoney(lastV)} vs ${fmtMoney(avg)}/day trailing-7 average — check billing, budgets and disapprovals`});
   });
   const order={critical:0,serious:1,warn:2};
   alerts.sort((a,b)=>order[a.sev]-order[b.sev]);
@@ -1230,7 +1344,7 @@ function renderSideCamps(){
   const rg=rangeDates();
   [...visibleRows()].sort((a,b)=>b.spend-a.spend).slice(0,8).forEach(r=>{
     const d=document.createElement('div'); d.className='camp-mini';
-    const dot=document.createElement('span'); dot.className='pdot'; dot.style.cssText='width:7px;height:7px;border-radius:50%;flex-shrink:0;background:'+PLATFORMS[r.platform].hex; d.appendChild(dot);
+    const dot=document.createElement('span'); dot.className='pdot'; dot.style.cssText='width:7px;height:7px;border-radius:50%;flex-shrink:0;background:'+platHex(r.platform); d.appendChild(dot);
     const nm=document.createElement('span'); nm.className='nm'; nm.textContent=r.name; d.appendChild(nm);
     const sp=document.createElement('span'); sp.className='sp'; sp.textContent=compact(r.spend); d.appendChild(sp);
     d.addEventListener('click',()=>{ openSheet(r,pacing(r,rg),rg); toggleSide(false); });
@@ -1362,7 +1476,7 @@ function accRender(){
   if(!list.length){ box.style.display='none'; return; }
   box.style.display='';
   list.sort((a,b)=>b.spend-a.spend).forEach(a=>{
-    const hex=PLATFORMS[a.p].hex, label=PLATFORMS[a.p].label;
+    const hex=platHex(a.p), label=PLATFORMS[a.p].label;
     const cur=(a.rows[0]&&a.rows[0].currency)||'USD';
     const d=document.createElement('div');
     d.className='acc-card'+(state.platform===a.p?' on':'');
@@ -1396,7 +1510,7 @@ function cfRender(){
   stage.innerHTML='';
   rows.forEach((r,idx)=>{
     const pc=pacing(r,rg);
-    const hex=PLATFORMS[r.platform].hex;
+    const hex=platHex(r.platform);
     const c=document.createElement('div');
     c.className='cf-card'; c.dataset.i=idx;
     const st=String(r.status).toUpperCase();
@@ -1467,7 +1581,7 @@ function cfLayout(){
   });
   const act=cf.items[cf.i];
   const glow=document.getElementById('cfGlow');
-  if(act&&glow)glow.style.setProperty('--glow',PLATFORMS[act.platform].hex);
+  if(act&&glow)glow.style.setProperty('--glow',platHex(act.platform));
   cfDots();
 }
 function cfDots(){
@@ -1540,6 +1654,8 @@ function openSheet(r,pc,rg){
     ['CPC',cpc!=null?fmtMoney(cpc,r.currency):'—'],
     ['Conversions',r.conversions==null?'n/a':compact(r.conversions)],
     ['CPA',cpa!=null?fmtMoney(cpa,r.currency):'n/a'],
+    ['Run-rate / day',fmtMoney(r.spend/rg.days,r.currency)],
+    ['Projected 30-day',fmtMoney(r.spend/rg.days*30,r.currency)],
   ];
   items.forEach(([k,v])=>{ const d=document.createElement('div'); d.className='k';
     const kl=document.createElement('div'); kl.className='kl'; kl.textContent=k; d.appendChild(kl);
@@ -1551,6 +1667,11 @@ function openSheet(r,pc,rg){
     f.textContent=`pacing = spend ÷ expected = ${fmtMoney(r.spend,r.currency)} ÷ ${fmtMoney(pc.expected,r.currency)} (${pc.basis}) = ${pc.pctv.toFixed(0)}%`;
     b.appendChild(f);
   }
+  const rr=r.spend/rg.days;
+  const f2=document.createElement('div'); f2.className='formula';
+  f2.textContent=`run-rate = ${fmtMoney(r.spend,r.currency)} ÷ ${rg.days} days = ${fmtMoney(rr,r.currency)}/day · projected 30-day ≈ ${fmtMoney(rr*30,r.currency)}`+
+    (r.dailyBudget?` vs 30-day budget ${fmtMoney(r.dailyBudget*30,r.currency)} (${Math.round(rr/r.dailyBudget*100)}% of budget)`:'');
+  b.appendChild(f2);
   document.getElementById('sheetOv').classList.add('on');
   document.getElementById('sheet').classList.add('on');
 }
@@ -1570,13 +1691,14 @@ document.getElementById('rangePills').addEventListener('click',e=>{
   const b=e.target.closest('.pill'); if(!b)return;
   document.querySelectorAll('#rangePills .pill').forEach(p=>p.classList.remove('on'));
   b.classList.add('on'); state.range=b.dataset.r;
-  /* previous-period comparison uses the freshly loaded window */
-  state.prevTotals=state.loaded?totals(visibleRows()):null;
   loadData();
 });
 
 function anyConfigured(){
-  return !!(cfg.gcid||cfg.fbid||cfg.tttoken||cfg.ttadv||cfg.litoken||cfg.liacct||localStorage.getItem('cmm_'+(user?user.id:'guest')+'_wsec'));
+  if(loadClients().length)return true;   /* a discovered roster alone is a valid setup */
+  return !!(cfg.gcid||cfg.fbid||cfg.tttoken||cfg.ttadv||cfg.litoken||cfg.liacct||
+            cfg.pttoken||cfg.ptacct||cfg.rdrefresh||cfg.rdacct||
+            localStorage.getItem('cmm_'+(user?user.id:'guest')+'_wsec'));
 }
 function showGate(){
   const gate=document.getElementById('gateBox');
@@ -1599,6 +1721,7 @@ function showGate(){
 (function init(){
   loadPrefs();
   loadCfg();
+  readHash();
   const g=user&&user.given_name?user.given_name:'there';
   document.getElementById('hi').textContent='Hi '+g+' 👋';
   document.getElementById('subLine').textContent='Live campaign performance, budgets & pacing · CMM Ads Intelligence';

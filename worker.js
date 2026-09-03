@@ -33,6 +33,7 @@
  * ------------------------------------------------------------------
  */
 
+const WORKER_VERSION = '3.0.0';   // bump when sources/behaviour change; the app's Connection Doctor compares it
 const META_V = 'v21.0';
 const GOOGLE_V = 'v21';
 
@@ -84,6 +85,7 @@ export default {
 
     const source = body.source;
     try {
+      if (source === 'health')        return await health(body, env);
       if (source === 'claude')        return await claude(body, env);
       if (source === 'google_ads')    return await googleAds(body, env);
       if (source === 'meta_ads')      return await metaAds(body, env);
@@ -110,6 +112,128 @@ export default {
     ctx.waitUntil(waRunDigest(env, Number(env.WHATSAPP_DIGEST_DAYS || 1), false));
   },
 };
+
+/* ── HEALTH: the app's Connection Doctor calls this ─────────────────
+   Reports the worker version, which secrets exist (booleans only — never
+   values), and with body.live=true runs one cheap authenticated probe per
+   platform and returns a parsed diagnosis with the exact fix. */
+async function health(body, env) {
+  const has = (k) => !!env[k];
+  const secrets = {
+    anthropic: !!(env.ANTHROPIC_API_KEY || env.CLAUDE_KEY || env.CLAUDE_API_KEY || env.ANTHROPIC_KEY),
+    auth_secret: has('AUTH_SECRET'),
+    meta: { access_token: has('META_ACCESS_TOKEN') },
+    google: {
+      developer_token: has('GOOGLE_ADS_DEVELOPER_TOKEN'), client_id: has('GOOGLE_ADS_CLIENT_ID'),
+      client_secret: has('GOOGLE_ADS_CLIENT_SECRET'), refresh_token: has('GOOGLE_ADS_REFRESH_TOKEN'),
+      login_customer_id: has('GOOGLE_ADS_LOGIN_CUSTOMER_ID'),
+    },
+    tiktok: { access_token: has('TIKTOK_ACCESS_TOKEN'), app_id: has('TIKTOK_APP_ID'), app_secret: has('TIKTOK_APP_SECRET') },
+    linkedin: { access_token: has('LINKEDIN_ACCESS_TOKEN'),
+      refresh: has('LINKEDIN_REFRESH_TOKEN') && has('LINKEDIN_CLIENT_ID') && has('LINKEDIN_CLIENT_SECRET') },
+    pinterest: { access_token: has('PINTEREST_ACCESS_TOKEN'),
+      refresh: has('PINTEREST_REFRESH_TOKEN') && has('PINTEREST_CLIENT_ID') && has('PINTEREST_CLIENT_SECRET') },
+    reddit: { access_token: has('REDDIT_ACCESS_TOKEN'),
+      refresh: has('REDDIT_REFRESH_TOKEN') && has('REDDIT_CLIENT_ID') && has('REDDIT_CLIENT_SECRET') },
+    whatsapp: { token: has('WHATSAPP_TOKEN'), phone_id: has('WHATSAPP_PHONE_ID') },
+  };
+  if (!body.live) return json({ version: WORKER_VERSION, secrets });
+
+  // Live probes — each is the cheapest authenticated call the platform has.
+  // A probe that can't run because nothing is configured reports 'skip'.
+  const deadline = (p, ms) => Promise.race([p, sleep(ms).then(() => ({ ok: false, error: 'Timed out after ' + ms / 1000 + 's' }))]);
+  const probe = async (name, fn) => {
+    try { return { name, ...(await deadline(fn(), 9000)) }; }
+    catch (e) { return { name, ok: false, error: String((e && e.message) || e) }; }
+  };
+  const passthru = (tok) => (tok ? { accessToken: tok } : {});
+
+  const checks = await Promise.all([
+    probe('meta', async () => {
+      if (!env.META_ACCESS_TOKEN) return { skip: 'META_ACCESS_TOKEN secret is not set' };
+      const d = await (await fetch(`https://graph.facebook.com/${META_V}/me/adaccounts?fields=name&limit=1&access_token=${encodeURIComponent(env.META_ACCESS_TOKEN)}`)).json();
+      if (d.error) return { ok: false, error: 'Facebook: ' + d.error.message, fix: /expired|invalid/i.test(d.error.message) ? 'Generate a new system-user token (never-expiring) and update META_ACCESS_TOKEN' : 'Check the token has ads_read on the right Business Manager assets' };
+      return { ok: true, detail: (d.data && d.data.length ? d.data.length + '+ ad account(s) reachable' : 'token valid, no ad accounts visible') };
+    }),
+    probe('google', async () => {
+      if (!env.GOOGLE_ADS_DEVELOPER_TOKEN) return { skip: 'GOOGLE_ADS_DEVELOPER_TOKEN secret is not set' };
+      const tok = await googleAccessToken(env);
+      if (tok.error) return { ok: false, error: tok.error, fix: /invalid_grant/i.test(tok.error) ? 'The refresh token was revoked — mint a new one with the OAuth flow in the Setup guide and update GOOGLE_ADS_REFRESH_TOKEN' : 'Check GOOGLE_ADS_CLIENT_ID / CLIENT_SECRET / REFRESH_TOKEN' };
+      const r = await fetch(`https://googleads.googleapis.com/${GOOGLE_V}/customers:listAccessibleCustomers`,
+        { headers: { Authorization: 'Bearer ' + tok.token, 'developer-token': env.GOOGLE_ADS_DEVELOPER_TOKEN } });
+      const t = await r.text();
+      if (!r.ok) return { ok: false, error: googleErr(r.status, t), fix: googleFix(t) };
+      let n = 0; try { n = (JSON.parse(t).resourceNames || []).length; } catch (_) {}
+      const mccNote = env.GOOGLE_ADS_LOGIN_CUSTOMER_ID ? '' : ' · no GOOGLE_ADS_LOGIN_CUSTOMER_ID set — client accounts under an MCC will 403 without it';
+      return { ok: true, detail: n + ' accessible customer(s)' + mccNote };
+    }),
+    probe('tiktok', async () => {
+      const tk = env.TIKTOK_ACCESS_TOKEN;
+      if (!tk) return { skip: 'TIKTOK_ACCESS_TOKEN secret is not set' };
+      const d = await (await fetch('https://business-api.tiktok.com/open_api/v1.3/user/info/', { headers: { 'Access-Token': tk } })).json();
+      if (d.code !== 0) return { ok: false, error: 'TikTok ' + d.code + ': ' + (d.message || 'error'), fix: tiktokFix(d.code) };
+      return { ok: true, detail: 'token valid' + (env.TIKTOK_APP_ID ? '' : ' · set TIKTOK_APP_ID/APP_SECRET to enable advertiser discovery') };
+    }),
+    probe('linkedin', async () => {
+      if (!env.LINKEDIN_ACCESS_TOKEN && !env.LINKEDIN_REFRESH_TOKEN) return { skip: 'No LINKEDIN_ACCESS_TOKEN or refresh trio set' };
+      const r = await linkedinAds({ action: 'accounts', count: 1 }, env);
+      const d = await r.json();
+      if (d.error) return { ok: false, error: d.error, fix: /401/.test(d.error) ? 'Access token expired — add LINKEDIN_REFRESH_TOKEN + LINKEDIN_CLIENT_ID/SECRET so it auto-renews, or paste a fresh token' : (/403/.test(d.error) ? 'The token is missing the r_ads scope, or the app lacks Marketing API access' : 'Check the token and LinkedIn-Version') };
+      return { ok: true, detail: (d.total || 0) + ' ad account(s) reachable' };
+    }),
+    probe('pinterest', async () => {
+      if (!env.PINTEREST_ACCESS_TOKEN && !env.PINTEREST_REFRESH_TOKEN) return { skip: 'No Pinterest token secrets set' };
+      const r = await pinterestAds({ action: 'accounts', ...passthru(null) }, env);
+      const d = await r.json();
+      if (d.error) return { ok: false, error: d.error, fix: /401/.test(d.error) ? 'Token expired — set PINTEREST_REFRESH_TOKEN + CLIENT_ID/SECRET for auto-renew' : 'Check the token has the ads:read scope' };
+      return { ok: true, detail: (d.total || 0) + ' ad account(s) reachable' };
+    }),
+    probe('reddit', async () => {
+      if (!env.REDDIT_ACCESS_TOKEN && !env.REDDIT_REFRESH_TOKEN) return { skip: 'No Reddit token secrets set' };
+      const r = await redditAds({ action: 'accounts' }, env);
+      const d = await r.json();
+      if (d.error) return { ok: false, error: d.error, fix: /refresh failed|401/.test(d.error) ? 'Reddit tokens expire daily — set REDDIT_REFRESH_TOKEN + REDDIT_CLIENT_ID/SECRET (the adsread scope)' : 'Check the app credentials' };
+      return { ok: true, detail: (d.total || 0) + ' ad account(s) reachable' };
+    }),
+    probe('anthropic', async () => {
+      const key = env.ANTHROPIC_API_KEY || env.CLAUDE_KEY || env.CLAUDE_API_KEY || env.ANTHROPIC_KEY;
+      if (!key) return { skip: 'ANTHROPIC_API_KEY secret is not set (the app can also use a browser-side key)' };
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] }),
+      });
+      if (r.status === 401) return { ok: false, error: 'API key rejected', fix: 'Replace the ANTHROPIC_API_KEY secret' };
+      return { ok: true, detail: 'API key accepted' };
+    }),
+  ]);
+  return json({ version: WORKER_VERSION, secrets, checks });
+}
+
+/* Google Ads errors arrive as deep JSON — surface the real message + code. */
+function googleErr(status, text) {
+  try {
+    const j = JSON.parse(text);
+    const e = Array.isArray(j) ? j[0].error : j.error;
+    const det = e && e.details && e.details[0] && e.details[0].errors && e.details[0].errors[0];
+    const code = det && det.errorCode ? Object.values(det.errorCode)[0] : '';
+    return 'Google ' + status + (code ? ' [' + code + ']' : '') + ': ' + ((det && det.message) || (e && e.message) || text.slice(0, 200));
+  } catch (_) { return 'Google ' + status + ': ' + text.slice(0, 300); }
+}
+function googleFix(text) {
+  if (/DEVELOPER_TOKEN_NOT_APPROVED/.test(text)) return 'Your developer token only works on test accounts — apply for Basic access in Google Ads → API Center';
+  if (/USER_PERMISSION_DENIED/.test(text)) return 'The OAuth user cannot see this account — set GOOGLE_ADS_LOGIN_CUSTOMER_ID to your MCC id (no dashes) and make sure the MCC links to this client account';
+  if (/CUSTOMER_NOT_FOUND|INVALID_CUSTOMER_ID/.test(text)) return 'The customer id is wrong — use the 10-digit id without dashes';
+  if (/DEACTIVATED|CANCELED/i.test(text)) return 'That Google Ads account is deactivated/cancelled';
+  if (/invalid_grant/.test(text)) return 'The refresh token was revoked — mint a new one and update GOOGLE_ADS_REFRESH_TOKEN';
+  return '';
+}
+function tiktokFix(code) {
+  if (code === 40105 || code === 40102) return 'The access token is invalid or expired — generate a new long-term token in TikTok Ads Manager and update TIKTOK_ACCESS_TOKEN';
+  if (code === 40001) return 'The request was malformed — usually a wrong advertiser id';
+  if (code === 40100) return 'Rate limited — wait a minute and retry';
+  if (code === 40104) return 'The token does not have permission on this advertiser — re-authorize with the right Business Center';
+  return '';
+}
 
 /* ── CLAUDE: proxy to Anthropic so the API key stays server-side ───── */
 async function claude(body, env) {
@@ -279,12 +403,20 @@ async function metaAds(body, env) {
     return json({ data: rows, total: rows.length, async: true, truncated: !!out.paging?.next });
   }
 
-  // Sync GET
-  const url = `${baseNode}?${toForm().toString()}`;
-  const data = await (await fetch(url)).json();
-  if (data.error) return json({ error: 'Facebook: ' + data.error.message });
-  const rows = data.data || [];
-  return json({ data: rows, total: rows.length, truncated: !!data.paging?.next });
+  // Sync GET — follow cursor pagination up to 1,000 rows (10 pages),
+  // which is what the app's tool description promises.
+  let url = `${baseNode}?${toForm().toString()}`;
+  const rows = [];
+  let next = url, pages = 0, truncated = false;
+  while (next && pages++ < 10) {
+    const data = await (await fetch(next)).json();
+    if (data.error) return json({ error: 'Facebook: ' + data.error.message });
+    rows.push(...(data.data || []));
+    next = data.paging && data.paging.next;
+    if (rows.length >= 1000) { truncated = !!next; break; }
+  }
+  if (next && pages >= 10) truncated = true;
+  return json({ data: rows, total: rows.length, truncated });
 }
 
 /* ── GOOGLE ADS: GAQL via searchStream ────────────────────────────── */
@@ -304,12 +436,18 @@ async function googleAds(body, env) {
     'developer-token': dev,
     'Content-Type': 'application/json',
   };
-  if (managerId) headers['login-customer-id'] = String(managerId).replace(/-/g, '');
+  // The MCC header is the #1 fix for Google 401/403s — fall back to the
+  // worker secret so it applies even when the app never sends a managerId.
+  const mgr = String(managerId || env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || '').replace(/-/g, '');
+  if (mgr && mgr !== cid) headers['login-customer-id'] = mgr;
 
   const url = `https://googleads.googleapis.com/${GOOGLE_V}/customers/${cid}/googleAds:searchStream`;
   const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ query: gaql }) });
   const text = await res.text();
-  if (!res.ok) return json({ error: 'Google ' + res.status + ': ' + text.slice(0, 400) });
+  if (!res.ok) {
+    const fix = googleFix(text);
+    return json({ error: googleErr(res.status, text) + (fix ? ' — FIX: ' + fix : '') });
+  }
 
   // searchStream returns an array of { results: [...] } batches — flatten them.
   let batches;
@@ -412,8 +550,6 @@ async function tiktokAds(body, env) {
 // syntax must stay raw — never run these query strings through URLSearchParams.
 async function linkedinAds(body, env) {
   let token = env.LINKEDIN_ACCESS_TOKEN || body.accessToken;
-  if (!token) return json({ error: 'LinkedIn not configured — set the LINKEDIN_ACCESS_TOKEN worker secret, or add your token in the app Configuration' });
-
   const LI_V = env.LINKEDIN_VERSION || '202506';
   const BASE = 'https://api.linkedin.com/rest';
   const acctId = String(body.accountId || env.LINKEDIN_AD_ACCOUNT_ID || '')
@@ -448,6 +584,10 @@ async function linkedinAds(body, env) {
     if (d && d.access_token) { token = d.access_token; return true; }
     return false;
   };
+  // Refresh-first: a refresh trio alone is a valid configuration (access
+  // tokens die every 60 days; the refresh token is what keeps working).
+  if (!token && !(await tryRefresh()))
+    return json({ error: 'LinkedIn not configured — set LINKEDIN_ACCESS_TOKEN, or the refresh trio (LINKEDIN_REFRESH_TOKEN + LINKEDIN_CLIENT_ID/SECRET), or add your token in the app Configuration' });
 
   const liFetch = async (url) => {
     let res = await fetch(url, { headers: mkHeaders() });
