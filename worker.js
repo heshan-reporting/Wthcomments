@@ -7,7 +7,10 @@
  *   meta_accounts / google_accounts / tiktok_accounts / linkedin_accounts
  *                   {}   <-- account discovery for the client roster
  *   tiktok_ads      { path?, advertiserId?, ... }   (optional)
- *   linkedin_ads    { ... }                          (optional stub)
+ *   linkedin_ads    { ... }                          (optional)
+ *   pinterest_ads   { action?, accountId?, ... }     (optional)
+ *   reddit_ads      { action?, accountId?, ... }     (optional)
+ *   pinterest_accounts / reddit_accounts             (roster discovery)
  *
  * Secrets (Worker → Settings → Variables):
  *   AUTH_SECRET                  – must match the app's "Worker Auth Token"
@@ -19,6 +22,12 @@
  *   GOOGLE_ADS_REFRESH_TOKEN
  *   (optional) TIKTOK_ACCESS_TOKEN, TIKTOK_ADVERTISER_ID
  *   (optional) LINKEDIN_ACCESS_TOKEN, LINKEDIN_AD_ACCOUNT_ID, LINKEDIN_VERSION
+ *   (optional) PINTEREST_ACCESS_TOKEN, PINTEREST_AD_ACCOUNT_ID,
+ *              PINTEREST_CLIENT_ID, PINTEREST_CLIENT_SECRET, PINTEREST_REFRESH_TOKEN
+ *   (optional) REDDIT_ACCESS_TOKEN, REDDIT_AD_ACCOUNT_ID,
+ *              REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_REFRESH_TOKEN
+ *              (Reddit access tokens expire after 24h — the refresh trio is
+ *               what keeps Reddit working unattended)
  *   Platform tokens may also arrive per-request as body.accessToken (set in the
  *   app's Configuration) — worker secrets take precedence when both exist.
  * ------------------------------------------------------------------
@@ -82,8 +91,12 @@ export default {
       if (source === 'google_accounts')   return await googleAccounts(env);
       if (source === 'tiktok_accounts')   return await tiktokAccounts(body, env);
       if (source === 'linkedin_accounts') return await linkedinAccounts(body, env);
+      if (source === 'pinterest_accounts') return await pinterestAccounts(body, env);
+      if (source === 'reddit_accounts')    return await redditAccounts(body, env);
       if (source === 'tiktok_ads')    return await tiktokAds(body, env);
       if (source === 'linkedin_ads')  return await linkedinAds(body, env);
+      if (source === 'pinterest_ads') return await pinterestAds(body, env);
+      if (source === 'reddit_ads')    return await redditAds(body, env);
       if (source === 'whatsapp_test') return await waTest(body, env);
       if (source === 'whatsapp_digest') return json(await waRunDigest(env, body.days || 1, !!body.dryRun));
       return json({ error: 'Unknown source: ' + source }, 400);
@@ -526,6 +539,236 @@ async function linkedinAds(body, env) {
     };
   });
   return json({ data: rows, total: rows.length, pivot, dateRange: { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) } });
+}
+
+/* ── PINTEREST Ads (API v5) ───────────────────────────────────────── */
+// Actions: analytics (default) | campaigns | accounts
+// Spend metrics arrive in micro-dollars; matching plain-currency fields
+// (SPEND, ECPC_…) are added alongside so callers never divide themselves.
+function pinNormalize(row) {
+  if (!row || typeof row !== 'object') return row;
+  const out = { ...row };
+  for (const k in row) {
+    if (/_IN_MICRO_DOLLAR$/.test(k)) out[k.replace(/_IN_MICRO_DOLLAR$/, '')] = +(Number(row[k] || 0) / 1e6).toFixed(2);
+  }
+  return out;
+}
+
+async function pinterestAds(body, env) {
+  let token = env.PINTEREST_ACCESS_TOKEN || body.accessToken;
+  if (!token) return json({ error: 'Pinterest not configured — set the PINTEREST_ACCESS_TOKEN worker secret, or add your token in the app Configuration' });
+
+  const BASE = 'https://api.pinterest.com/v5';
+  const acctId = String(body.accountId || env.PINTEREST_AD_ACCOUNT_ID || '').trim();
+  const action = body.action || 'analytics';
+
+  // Refresh-on-401: needs PINTEREST_CLIENT_ID / PINTEREST_CLIENT_SECRET plus a refresh token.
+  const refreshToken = env.PINTEREST_REFRESH_TOKEN || body.refreshToken;
+  let refreshed = false;
+  const tryRefresh = async () => {
+    if (refreshed || !refreshToken || !env.PINTEREST_CLIENT_ID || !env.PINTEREST_CLIENT_SECRET) return false;
+    refreshed = true;
+    const r = await fetch(`${BASE}/oauth/token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: 'Basic ' + btoa(env.PINTEREST_CLIENT_ID + ':' + env.PINTEREST_CLIENT_SECRET),
+      },
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken }),
+    });
+    const d = await r.json().catch(() => null);
+    if (d && d.access_token) { token = d.access_token; return true; }
+    return false;
+  };
+
+  const pFetch = async (url) => {
+    let res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+    if (res.status === 401 && await tryRefresh()) {
+      res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+    }
+    const text = await res.text();
+    let data; try { data = JSON.parse(text); } catch (_) { data = null; }
+    if (!res.ok) return { error: 'Pinterest ' + res.status + ': ' + ((data && data.message) || text.slice(0, 300)) };
+    return { data };
+  };
+
+  if (action === 'accounts') {
+    const r = await pFetch(`${BASE}/ad_accounts?page_size=100`);
+    if (r.error) return json(r);
+    const rows = (r.data && r.data.items) || [];
+    return json({ data: rows, total: rows.length });
+  }
+
+  if (!acctId) return json({ error: 'No Pinterest ad account ID — set it in the app Configuration, or use action:"accounts" to list accessible accounts' });
+
+  if (action === 'campaigns') {
+    let url = `${BASE}/ad_accounts/${acctId}/campaigns?page_size=100`;
+    if (body.statuses) url += '&entity_statuses=' + encodeURIComponent([].concat(body.statuses).join(','));
+    const r = await pFetch(url);
+    if (r.error) return json(r);
+    const rows = (r.data && r.data.items) || [];
+    return json({ data: rows, total: rows.length });
+  }
+
+  // ── analytics (default) ──
+  const day = (d) => d.toISOString().slice(0, 10);
+  const endDate = body.endDate || day(new Date());
+  const startDate = body.startDate || day(new Date(Date.now() - 30 * 864e5));
+  const columns = (Array.isArray(body.columns) && body.columns.length ? body.columns
+    : ['SPEND_IN_MICRO_DOLLAR', 'IMPRESSION_2', 'CLICKTHROUGH_2', 'TOTAL_CONVERSIONS']).join(',');
+  const gran = body.granularity || 'TOTAL';
+  const range = `start_date=${startDate}&end_date=${endDate}&columns=${encodeURIComponent(columns)}&granularity=${gran}`;
+
+  const campAnalytics = async (ids, names) => {
+    const r = await pFetch(`${BASE}/ad_accounts/${acctId}/campaigns/analytics?campaign_ids=${encodeURIComponent(ids.join(','))}&${range}`);
+    if (r.error) return r;
+    const arr = Array.isArray(r.data) ? r.data : ((r.data && r.data.items) || []);
+    return { rows: arr.map(pinNormalize).map((row) => (names && names[row.CAMPAIGN_ID]
+      ? { ...row, CAMPAIGN_NAME: row.CAMPAIGN_NAME || names[row.CAMPAIGN_ID] } : row)) };
+  };
+
+  if (Array.isArray(body.campaignIds) && body.campaignIds.length) {
+    const r = await campAnalytics(body.campaignIds.slice(0, 100));
+    if (r.error) return json(r);
+    return json({ data: r.rows, total: r.rows.length, dateRange: { start: startDate, end: endDate } });
+  }
+  if (body.level === 'campaign') {
+    // No ids given — list campaigns first, then pull their analytics in one call.
+    const c = await pFetch(`${BASE}/ad_accounts/${acctId}/campaigns?page_size=100`);
+    if (c.error) return json(c);
+    const camps = (c.data && c.data.items) || [];
+    if (!camps.length) return json({ data: [], total: 0, dateRange: { start: startDate, end: endDate } });
+    const names = {}; camps.forEach((x) => { names[x.id] = x.name; });
+    const r = await campAnalytics(camps.slice(0, 100).map((x) => x.id), names);
+    if (r.error) return json(r);
+    return json({ data: r.rows, total: r.rows.length, dateRange: { start: startDate, end: endDate } });
+  }
+
+  // account-level analytics
+  const r = await pFetch(`${BASE}/ad_accounts/${acctId}/analytics?${range}`);
+  if (r.error) return json(r);
+  const arr = Array.isArray(r.data) ? r.data : ((r.data && r.data.items) || [r.data]);
+  const rows = arr.map(pinNormalize);
+  return json({ data: rows, total: rows.length, dateRange: { start: startDate, end: endDate } });
+}
+
+async function pinterestAccounts(body, env) {
+  const r = await pinterestAds({ ...body, action: 'accounts' }, env);
+  const d = await r.json();
+  if (d.error) return json({ error: d.error });
+  const accounts = (d.data || []).map((a) => ({ id: String(a.id), name: a.name || String(a.id), currency: a.currency }));
+  return json({ accounts });
+}
+
+/* ── REDDIT Ads (API v3) ──────────────────────────────────────────── */
+// Actions: report (default) | campaigns | accounts
+// Reddit access tokens expire after ~24h, so the refresh trio
+// (REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET / REDDIT_REFRESH_TOKEN) is what
+// keeps this working unattended. Spend arrives in micro-currency — the
+// handler converts it to plain units before returning.
+async function redditAds(body, env) {
+  let token = env.REDDIT_ACCESS_TOKEN || body.accessToken;
+  const refreshToken = env.REDDIT_REFRESH_TOKEN || body.refreshToken;
+  if (!token && !refreshToken) return json({ error: 'Reddit not configured — set REDDIT_REFRESH_TOKEN (+ REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET), or add a token in the app Configuration' });
+
+  const BASE = 'https://ads-api.reddit.com/api/v3';
+  const UA = 'cmm-ads-intelligence/1.0';
+  const acctId = String(body.accountId || env.REDDIT_AD_ACCOUNT_ID || '').trim();
+  const action = body.action || 'report';
+
+  let refreshed = false;
+  const tryRefresh = async () => {
+    if (refreshed || !refreshToken || !env.REDDIT_CLIENT_ID || !env.REDDIT_CLIENT_SECRET) return false;
+    refreshed = true;
+    const r = await fetch('https://www.reddit.com/api/v1/access_token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: 'Basic ' + btoa(env.REDDIT_CLIENT_ID + ':' + env.REDDIT_CLIENT_SECRET),
+        'User-Agent': UA,
+      },
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken }),
+    });
+    const d = await r.json().catch(() => null);
+    if (d && d.access_token) { token = d.access_token; return true; }
+    return false;
+  };
+  if (!token && !(await tryRefresh())) return json({ error: 'Reddit token refresh failed — check REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET / REDDIT_REFRESH_TOKEN' });
+
+  const rFetch = async (url, init) => {
+    const mk = () => ({ ...(init || {}),
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', 'User-Agent': UA } });
+    let res = await fetch(url, mk());
+    if (res.status === 401 && await tryRefresh()) res = await fetch(url, mk());
+    const text = await res.text();
+    let data; try { data = JSON.parse(text); } catch (_) { data = null; }
+    if (!res.ok) {
+      const msg = (data && (data.message || (data.error && (data.error.message || data.error)))) || text.slice(0, 300);
+      return { error: 'Reddit ' + res.status + ': ' + (typeof msg === 'string' ? msg : JSON.stringify(msg).slice(0, 300)) };
+    }
+    return { data };
+  };
+
+  if (action === 'accounts') {
+    const r = await rFetch(`${BASE}/ad_accounts?page.size=100`);
+    if (r.error) return json(r);
+    const rows = (r.data && r.data.data) || [];
+    return json({ data: rows, total: rows.length });
+  }
+
+  if (!acctId) return json({ error: 'No Reddit ad account ID — set it in the app Configuration, or use action:"accounts" to list accessible accounts' });
+
+  if (action === 'campaigns') {
+    const r = await rFetch(`${BASE}/ad_accounts/${acctId}/campaigns?page.size=100`);
+    if (r.error) return json(r);
+    const rows = (r.data && r.data.data) || [];
+    return json({ data: rows, total: rows.length });
+  }
+
+  // ── report (default) ──
+  const iso = (s, endOfDay) => (/T/.test(String(s)) ? s : s + (endOfDay ? 'T23:59:59Z' : 'T00:00:00Z'));
+  const day = (d) => d.toISOString().slice(0, 10);
+  const endDate = body.endDate || day(new Date());
+  const startDate = body.startDate || day(new Date(Date.now() - 30 * 864e5));
+  const breakdowns = (Array.isArray(body.breakdowns) && body.breakdowns.length) ? body.breakdowns
+    : (body.granularity === 'DAY' ? ['campaign_id', 'date'] : ['campaign_id']);
+  const fields = (Array.isArray(body.fields) && body.fields.length ? body.fields
+    : ['spend', 'impressions', 'clicks', 'ctr', 'cpc']);
+
+  // Campaign names aren't in the report — join them in when campaign_id is a breakdown.
+  let names = null;
+  if (breakdowns.includes('campaign_id')) {
+    const c = await rFetch(`${BASE}/ad_accounts/${acctId}/campaigns?page.size=100`);
+    if (!c.error) { names = {}; ((c.data && c.data.data) || []).forEach((x) => { names[x.id] = x.name; }); }
+  }
+
+  const r = await rFetch(`${BASE}/ad_accounts/${acctId}/reports`, {
+    method: 'POST',
+    body: JSON.stringify({ data: {
+      breakdowns, fields,
+      starts_at: iso(startDate), ends_at: iso(endDate, true),
+      time_zone_id: body.timezone || 'GMT',
+    } }),
+  });
+  if (r.error) return json(r);
+  const metrics = (r.data && r.data.data && r.data.data.metrics) || [];
+  const rows = metrics.map((m) => {
+    if (!m || typeof m !== 'object') return m;
+    const out = { ...m };
+    if (out.spend != null) out.spend = +(Number(out.spend) / 1e6).toFixed(2);   // micro-currency → plain
+    if (out.cpc != null) out.cpc = +(Number(out.cpc) / 1e6).toFixed(2);
+    if (names && out.campaign_id != null && names[out.campaign_id]) out.campaign_name = names[out.campaign_id];
+    return out;
+  });
+  return json({ data: rows, total: rows.length, dateRange: { start: startDate, end: endDate } });
+}
+
+async function redditAccounts(body, env) {
+  const r = await redditAds({ ...body, action: 'accounts' }, env);
+  const d = await r.json();
+  if (d.error) return json({ error: d.error });
+  const accounts = (d.data || []).map((a) => ({ id: String(a.id), name: a.name || String(a.id), currency: a.currency }));
+  return json({ accounts });
 }
 
 
