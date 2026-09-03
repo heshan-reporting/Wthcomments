@@ -1257,6 +1257,15 @@ textarea:focus,input:focus{outline:none}
         <label>Worker Auth Token</label>
         <input type="password" id="c-wsec" placeholder="your-auth-secret">
       </div>
+      <div class="fld">
+        <label>Connection Doctor</label>
+        <div class="fhint">Checks the worker version and tests every platform's credentials live, then tells you the exact fix for anything broken.</div>
+        <button class="cl-add" type="button" id="doc-btn" onclick="runDoctor()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          Run connection check
+        </button>
+        <div id="doc-out" style="display:none;margin-top:10px;border:1px solid var(--border);border-radius:10px;padding:4px 12px;font-size:12px"></div>
+      </div>
       <div class="fdiv"><span class="fdot g"></span>Google Ads</div>
       <div class="fld">
         <label>Customer ID</label>
@@ -1640,13 +1649,18 @@ function resolveClients(sel,plat){
   const all=loadClients().filter(c=>clientHas(c,plat));
   if(!sel||sel==='all'||(Array.isArray(sel)&&(!sel.length||sel.map(String).some(x=>x.toLowerCase()==='all'))))return all;
   const want=(Array.isArray(sel)?sel:[sel]).map(x=>String(x).toLowerCase().trim());
-  const hit=all.filter(c=>want.some(w=>c.name.toLowerCase()===w||c.name.toLowerCase().includes(w)||String(c.id).toLowerCase()===w));
-  return hit.length?hit:all;
+  /* Only ever return actual matches — silently widening a named client to
+     "all clients" would produce answers about the wrong accounts. */
+  return all.filter(c=>want.some(w=>c.name.toLowerCase()===w||c.name.toLowerCase().includes(w)||String(c.id).toLowerCase()===w));
 }
 /* Run one fetch per client in parallel and return a single tagged payload. */
 async function fanOut(plat,sel,runner){
   const targets=resolveClients(sel,plat);
-  if(!targets.length)return {error:'No clients configured for '+plat+' — add one in Configuration → Clients.'};
+  if(!targets.length){
+    const all=loadClients().filter(c=>clientHas(c,plat));
+    if(all.length)return {error:'No client matches '+JSON.stringify(sel)+' for '+plat+'. Configured clients with this platform: '+all.map(c=>c.name).join(', ')+'. Use a name from list_clients, or omit "clients" to query all of them.'};
+    return {error:'No clients configured for '+plat+' — add one in Configuration → Clients.'};
+  }
   const settled=await Promise.all(targets.map(async c=>{
     try{ const r=await runner(c); if(r.error)return {client:c.name,error:r.error};
       let parsed=null; try{ parsed=JSON.parse(r.data); }catch(_){ }
@@ -2456,7 +2470,12 @@ async function ask(userMsg){
           }catch(err){ r={error:'Tool execution error: '+(err&&err.message||err)}; }
           if(!r)r={error:`Tool "${t.name}" is not supported`};
           if(r.error)results.push({type:'tool_result',tool_use_id:t.id,content:JSON.stringify({error:r.error}),is_error:true});
-          else results.push({type:'tool_result',tool_use_id:t.id,content:r.data});
+          else{
+            /* cap huge payloads so one giant response can't blow the context */
+            const cap=150000;
+            const body=r.data.length>cap?r.data.slice(0,cap)+'…[truncated — '+r.data.length+' chars total; narrow the query with fewer fields, a shorter range, or a limit]':r.data;
+            results.push({type:'tool_result',tool_use_id:t.id,content:body});
+          }
         }
         hist.push({role:'user',content:results});
         loop=true;
@@ -2542,6 +2561,61 @@ async function discoverClients(){
        ' — redeploy worker.js to enable':''), false);
 }
 
+
+/* ── Connection Doctor ──────────────────────────────────────────────
+   One click answers "why is platform X not working": worker reachability,
+   auth, worker version, then a live credential probe per platform with the
+   exact fix. All probes run in the worker; no secret ever reaches here. */
+const EXPECTED_WORKER_VERSION='3.0.0';
+async function runDoctor(){
+  const out=document.getElementById('doc-out'), btn=document.getElementById('doc-btn');
+  out.style.display=''; out.innerHTML='';
+  const row=(icon,color,title,detail)=>{
+    const d=document.createElement('div');
+    d.style.cssText='display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--border)';
+    const ic=document.createElement('span'); ic.textContent=icon; ic.style.cssText='color:'+color+';flex-shrink:0;font-weight:700';
+    const w=document.createElement('div');
+    const t=document.createElement('div'); t.textContent=title; t.style.fontWeight='600';
+    w.appendChild(t);
+    if(detail){ const s=document.createElement('div'); s.textContent=detail; s.style.cssText='color:var(--text-3);margin-top:2px'; w.appendChild(s); }
+    d.appendChild(ic); d.appendChild(w); out.appendChild(d); return d;
+  };
+  if(!cfg.wurl){ row('✗','var(--red)','No Worker URL','Set the Worker URL above first.'); return; }
+  btn.disabled=true; btn.style.opacity=.6;
+  const working=row('…','var(--amb)','Checking worker at '+cfg.wurl,'Running live credential probes — this takes a few seconds.');
+  try{
+    const r=await fetch(cfg.wurl,{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':cfg.wsec||''},
+      body:JSON.stringify({source:'health',live:true})});
+    const text=await r.text();
+    working.remove();
+    if(r.status===401){
+      row('✗','var(--red)','Worker Auth Token mismatch','The token in this app does not match the AUTH_SECRET secret on the worker. Fix either side so they are identical.');
+      return;
+    }
+    let j; try{ j=JSON.parse(text); }catch(_){ row('✗','var(--red)','Worker returned something unexpected',text.slice(0,200)); return; }
+    if(j.error&&/Unknown source/i.test(j.error)){
+      row('✗','var(--red)','Your deployed worker is OUTDATED — this is why TikTok, LinkedIn, Pinterest, Reddit and client discovery fail',
+        'The worker running on Cloudflare predates those platforms. Copy the current worker.js from this repo over it (dash.cloudflare.com → Workers → your worker → Edit code → replace everything → Deploy), then run this check again.');
+      row('✓','var(--grn)','Worker reachable & auth OK','Meta and Google run through code that exists in the old worker, which is why they may still partly work.');
+      return;
+    }
+    if(j.error){ row('✗','var(--red)','Worker error',j.error); return; }
+    const vOk=j.version===EXPECTED_WORKER_VERSION;
+    row(vOk?'✓':'△',vOk?'var(--grn)':'var(--amb)','Worker reachable · version '+(j.version||'unknown'),
+      vOk?'Auth OK, running the latest code.':'This app expects version '+EXPECTED_WORKER_VERSION+' — redeploy worker.js from the repo to pick up the newest fixes.');
+    const LBL={meta:'Meta Ads',google:'Google Ads',tiktok:'TikTok Ads',linkedin:'LinkedIn Ads',pinterest:'Pinterest Ads',reddit:'Reddit Ads',anthropic:'AI engine (Anthropic key on worker)'};
+    (j.checks||[]).forEach(c=>{
+      const name=LBL[c.name]||c.name;
+      if(c.skip){ row('○','var(--text-3)',name+' — not configured',c.skip); return; }
+      if(c.ok){ row('✓','var(--grn)',name+' — connected',c.detail||''); return; }
+      row('✗','var(--red)',name+' — failing',(c.error||'')+(c.fix?'  →  FIX: '+c.fix:''));
+    });
+    if(!(j.checks||[]).length)row('△','var(--amb)','No live checks returned','The worker responded but sent no probe results.');
+  }catch(e){
+    working.remove();
+    row('✗','var(--red)','Cannot reach the worker','Fetch failed: '+e.message+'. Check the URL, and that the worker is deployed (it should answer at '+cfg.wurl+').');
+  }finally{ btn.disabled=false; btn.style.opacity=1; }
+}
 
 /* ── WhatsApp helpers (all sends happen in the worker) ── */
 async function waCall(body){
