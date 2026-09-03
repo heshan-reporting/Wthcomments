@@ -702,7 +702,11 @@ function activeClients(p){
 }
 
 /* ═════════════════════ worker calls ═════════════════════ */
+/* The worker caches identical queries for ~15 min when we opt in (cacheOk),
+   so the portal loads fast; the manual refresh button forces live data. */
 async function wcall(body){
+  body=Object.assign({cacheOk:true},body);
+  if(state.forceFresh)body.fresh=true;
   const r=await fetch(cfg.wurl,{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':cfg.wsec||''},body:JSON.stringify(body)});
   const text=await r.text();
   if(!r.ok)throw new Error('Worker '+r.status);
@@ -751,6 +755,10 @@ async function fetchMeta(rg,cl){
 
 async function fetchTikTok(rg,cl){
   const base={source:'tiktok_ads',...(cfg.tttoken?{accessToken:cfg.tttoken}:{}),advertiserId:cl.tiktok.adv};
+  /* the account's own billing currency — from discovery, else the advertiser record */
+  let cur=cl.tiktok.cur;
+  if(!cur){ try{ cur=(await wcall({...base,action:'advertiser_info'})).currency; }catch(e){} }
+  cur=cur||'USD';
   const camps=await wcall({...base,action:'campaigns',fields:['campaign_id','campaign_name','operation_status','budget','budget_mode']});
   const rep=await wcall({...base,action:'report',dimensions:['campaign_id'],metrics:['spend','impressions','clicks'],startDate:dayStr(rg.start),endDate:dayStr(rg.end),pageSize:200});
   const day=await wcall({...base,action:'report',dimensions:['advertiser_id','stat_time_day'],metrics:['spend'],startDate:dayStr(rg.prevStart),endDate:dayStr(rg.end),pageSize:200});
@@ -759,7 +767,7 @@ async function fetchTikTok(rg,cl){
     const id=r.dimensions?r.dimensions.campaign_id:r.campaign_id; const m=r.metrics||r; const mm=meta[id]||{};
     return { client:cl.name, platform:'tiktok', id:String(id), name:mm.name||('Campaign '+id), status:mm.status||'UNKNOWN',
       dailyBudget:mm.budget, lifetimeBudget:mm.life, spend:Number(m.spend||0), impressions:Number(m.impressions||0),
-      clicks:Number(m.clicks||0), conversions:null, currency:'USD' };
+      clicks:Number(m.clicks||0), conversions:null, currency:cur };
   });
   const daily={}; (day.data||[]).forEach(r=>{ const d=r.dimensions&&r.dimensions.stat_time_day?r.dimensions.stat_time_day.slice(0,10):null; const m=r.metrics||r; if(d)daily[d]=(daily[d]||0)+Number(m.spend||0); });
   return {rows,daily};
@@ -791,6 +799,9 @@ async function fetchLinkedIn(rg,cl){
 
 async function fetchPinterest(rg,cl){
   const base={source:'pinterest_ads',...(cfg.pttoken?{accessToken:cfg.pttoken}:{}),...(cfg.ptrefresh?{refreshToken:cfg.ptrefresh}:{}),accountId:cl.pinterest.acct};
+  let cur=cl.pinterest.cur;
+  if(!cur){ try{ cur=(await wcall({...base,action:'account'})).currency; }catch(e){} }
+  cur=cur||'USD';
   const camps=await wcall({...base,action:'campaigns'});
   const ana=await wcall({...base,action:'analytics',level:'campaign',startDate:dayStr(rg.start),endDate:dayStr(rg.end)});
   const day=await wcall({...base,action:'analytics',granularity:'DAY',startDate:dayStr(rg.prevStart),endDate:dayStr(rg.end)});
@@ -802,7 +813,7 @@ async function fetchPinterest(rg,cl){
     return { client:cl.name, platform:'pinterest', id, name:r.CAMPAIGN_NAME||mm.name||('Campaign '+id), status:mm.status||r.CAMPAIGN_STATUS||'UNKNOWN',
       dailyBudget:mm.daily, lifetimeBudget:mm.life, spend:Number(r.SPEND||0),  /* SPEND is pre-divided by the worker */
       impressions:Number(r.IMPRESSION_2||0), clicks:Number(r.CLICKTHROUGH_2||0),
-      conversions:r.TOTAL_CONVERSIONS!=null?Number(r.TOTAL_CONVERSIONS):null, currency:'USD' };
+      conversions:r.TOTAL_CONVERSIONS!=null?Number(r.TOTAL_CONVERSIONS):null, currency:cur };
   });
   const daily={}; (day.data||[]).forEach(r=>{ const d=r.DATE; if(d)daily[d]=(daily[d]||0)+Number(r.SPEND||0); });
   return {rows,daily};
@@ -810,6 +821,9 @@ async function fetchPinterest(rg,cl){
 
 async function fetchReddit(rg,cl){
   const base={source:'reddit_ads',...(cfg.rdtoken?{accessToken:cfg.rdtoken}:{}),...(cfg.rdrefresh?{refreshToken:cfg.rdrefresh}:{}),accountId:cl.reddit.acct};
+  let cur=cl.reddit.cur;
+  if(!cur){ try{ cur=(await wcall({...base,action:'account'})).currency; }catch(e){} }
+  cur=cur||'USD';
   const camps=await wcall({...base,action:'campaigns'});
   const rep=await wcall({...base,action:'report',breakdowns:['campaign_id'],fields:['spend','impressions','clicks'],startDate:dayStr(rg.start),endDate:dayStr(rg.end)});
   const day=await wcall({...base,action:'report',breakdowns:['date'],fields:['spend'],startDate:dayStr(rg.prevStart),endDate:dayStr(rg.end)});
@@ -820,7 +834,7 @@ async function fetchReddit(rg,cl){
     const id=String(r.campaign_id||''); const mm=meta[id]||{};
     return { client:cl.name, platform:'reddit', id, name:r.campaign_name||mm.name||('Campaign '+id), status:mm.status||'UNKNOWN',
       dailyBudget:mm.daily, lifetimeBudget:mm.life, spend:Number(r.spend||0),
-      impressions:Number(r.impressions||0), clicks:Number(r.clicks||0), conversions:null, currency:'USD' };
+      impressions:Number(r.impressions||0), clicks:Number(r.clicks||0), conversions:null, currency:cur };
   });
   const daily={}; (day.data||[]).forEach(r=>{ const d=r.date?String(r.date).slice(0,10):null; if(d)daily[d]=(daily[d]||0)+Number(r.spend||0); });
   return {rows,daily};
@@ -901,12 +915,12 @@ async function loadData(){
       if(d<cut){ prevSpend[p]=(prevSpend[p]||0)+daily[p][d]; delete daily[p][d]; } }); });
     state.rows=rows; state.daily=daily; state.prevSpend=prevSpend;
   }
-  state.loading=false; state.loaded=true;
+  state.loading=false; state.loaded=true; state.forceFresh=false;
   document.getElementById('refreshBtn').classList.remove('spin');
   document.querySelectorAll('#dash .card').forEach(c=>c.classList.remove('loading-dim'));
   render();
 }
-function refresh(){ loadData(); }
+function refresh(){ state.forceFresh=true; loadData(); }
 
 function visibleRows(){
   let rs=state.platform==='all'?state.rows:state.rows.filter(r=>r.platform===state.platform);

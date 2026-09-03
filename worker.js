@@ -33,7 +33,33 @@
  * ------------------------------------------------------------------
  */
 
-const WORKER_VERSION = '3.0.0';   // bump when sources/behaviour change; the app's Connection Doctor compares it
+const WORKER_VERSION = '3.1.0';   // bump when sources/behaviour change; the app's Connection Doctor compares it
+
+/* Optional infrastructure (all feature-gated — the worker runs fine without):
+   ADS_KV (KV namespace binding)  – enables the query cache, daily spend
+     history snapshots, monitoring baselines, and the mutation audit log.
+     Create: Cloudflare dash → Storage & Databases → KV → create namespace,
+     then bind it to this worker as "ADS_KV".
+   CACHE_TTL            – query cache lifetime in seconds (default 900).
+   ALLOW_MUTATIONS      – set to "true" to enable pause/enable/budget changes.
+   MUTATION_MAX_BUDGET  – optional cap on any budget amount set via mutate.
+   CLIENTS_JSON entries may carry any platform ids plus "monthlyBudget"
+   (account currency) to enable budget-exhaustion forecasts:
+   [{"name":"Acme","meta":{"act":"act_1"},"google":{"cid":"123"},
+     "tiktok":{"adv":"7..."},"linkedin":{"acct":"5..."},
+     "pinterest":{"acct":"5..."},"reddit":{"acct":"t2_..."},
+     "monthlyBudget":15000}] */
+
+/* Sources served from the cache when the caller opts in (cacheOk:true). */
+const CACHE_SOURCES = ['google_ads','meta_ads','tiktok_ads','linkedin_ads','pinterest_ads','reddit_ads',
+  'meta_accounts','google_accounts','tiktok_accounts','linkedin_accounts','pinterest_accounts','reddit_accounts'];
+
+async function cacheKey(body) {
+  const c = { ...body };
+  delete c.accessToken; delete c.refreshToken; delete c.cacheOk; delete c.fresh;   // never key on secrets
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(c)));
+  return 'q:' + [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 const META_V = 'v21.0';
 const GOOGLE_V = 'v21';
 
@@ -85,33 +111,71 @@ export default {
 
     const source = body.source;
     try {
-      if (source === 'health')        return await health(body, env);
-      if (source === 'claude')        return await claude(body, env);
-      if (source === 'google_ads')    return await googleAds(body, env);
-      if (source === 'meta_ads')      return await metaAds(body, env);
-      if (source === 'meta_accounts') return await metaAccounts(env);
-      if (source === 'google_accounts')   return await googleAccounts(env);
-      if (source === 'tiktok_accounts')   return await tiktokAccounts(body, env);
-      if (source === 'linkedin_accounts') return await linkedinAccounts(body, env);
-      if (source === 'pinterest_accounts') return await pinterestAccounts(body, env);
-      if (source === 'reddit_accounts')    return await redditAccounts(body, env);
-      if (source === 'tiktok_ads')    return await tiktokAds(body, env);
-      if (source === 'linkedin_ads')  return await linkedinAds(body, env);
-      if (source === 'pinterest_ads') return await pinterestAds(body, env);
-      if (source === 'reddit_ads')    return await redditAds(body, env);
-      if (source === 'whatsapp_test') return await waTest(body, env);
-      if (source === 'whatsapp_digest') return json(await waRunDigest(env, body.days || 1, !!body.dryRun));
-      return json({ error: 'Unknown source: ' + source }, 400);
+      // ── read-through query cache (opt-in per request via cacheOk) ──
+      const cacheable = env.ADS_KV && body.cacheOk && !body.fresh && CACHE_SOURCES.includes(source);
+      let ckey = null;
+      if (cacheable) {
+        ckey = await cacheKey(body);
+        const hit = await env.ADS_KV.get(ckey);
+        if (hit) return new Response(hit, { headers: { ...CORS, 'Content-Type': 'application/json', 'X-Cache': 'HIT' } });
+      }
+      const res = await routeSource(source, body, env);
+      if (cacheable && res && res.status === 200) {
+        const txt = await res.clone().text();
+        let ok = false; try { ok = !JSON.parse(txt).error; } catch (_) {}
+        if (ok) await env.ADS_KV.put(ckey, txt, { expirationTtl: Math.max(60, Number(env.CACHE_TTL || 900)) });
+      }
+      return res;
     } catch (e) {
       return json({ error: String((e && e.message) || e) }, 200);
     }
   },
 
-  // ── Cron Trigger: the scheduled WhatsApp digest ──
+  // ── Cron Trigger: snapshot → monitors → WhatsApp digest ──
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(waRunDigest(env, Number(env.WHATSAPP_DIGEST_DAYS || 1), false));
+    ctx.waitUntil((async () => {
+      if (env.ADS_KV) {
+        try { await spendSnapshot(env); } catch (_) {}
+        try {
+          const m = await runMonitors(env);
+          if (m.alerts && m.alerts.length && env.WHATSAPP_TOKEN && env.WHATSAPP_PHONE_ID) {
+            const to = waNums(env.WHATSAPP_RECIPIENTS);
+            const lines = m.alerts.slice(0, 10).map((a) => '• ' + a.msg).join('\n');
+            await Promise.all(to.map((n) =>
+              waSendTemplate(env, n, ['⚠ Alerts · ' + new Date().toISOString().slice(0, 10),
+                m.alerts.length + ' issue(s) need attention', lines]).catch(() => null)));
+          }
+        } catch (_) {}
+      }
+      await waRunDigest(env, Number(env.WHATSAPP_DIGEST_DAYS || 1), false);
+    })());
   },
 };
+
+async function routeSource(source, body, env) {
+  if (source === 'health')        return await health(body, env);
+  if (source === 'claude')        return await claude(body, env);
+  if (source === 'google_ads')    return await googleAds(body, env);
+  if (source === 'meta_ads')      return await metaAds(body, env);
+  if (source === 'meta_accounts') return await metaAccounts(env);
+  if (source === 'google_accounts')   return await googleAccounts(env);
+  if (source === 'tiktok_accounts')   return await tiktokAccounts(body, env);
+  if (source === 'linkedin_accounts') return await linkedinAccounts(body, env);
+  if (source === 'pinterest_accounts') return await pinterestAccounts(body, env);
+  if (source === 'reddit_accounts')    return await redditAccounts(body, env);
+  if (source === 'tiktok_ads')    return await tiktokAds(body, env);
+  if (source === 'linkedin_ads')  return await linkedinAds(body, env);
+  if (source === 'pinterest_ads') return await pinterestAds(body, env);
+  if (source === 'reddit_ads')    return await redditAds(body, env);
+  if (source === 'history')       return await historyGet(body, env);
+  if (source === 'snapshot')      return json(await spendSnapshot(env, true));
+  if (source === 'monitor')       return json(await runMonitors(env));
+  if (source === 'mutate')        return await mutate(body, env);
+  if (source === 'audit_log')     return await auditLog(body, env);
+  if (source === 'whatsapp_test') return await waTest(body, env);
+  if (source === 'whatsapp_digest') return json(await waRunDigest(env, body.days || 1, !!body.dryRun));
+  return json({ error: 'Unknown source: ' + source }, 400);
+}
 
 /* ── HEALTH: the app's Connection Doctor calls this ─────────────────
    Reports the worker version, which secrets exist (booleans only — never
@@ -137,7 +201,12 @@ async function health(body, env) {
       refresh: has('REDDIT_REFRESH_TOKEN') && has('REDDIT_CLIENT_ID') && has('REDDIT_CLIENT_SECRET') },
     whatsapp: { token: has('WHATSAPP_TOKEN'), phone_id: has('WHATSAPP_PHONE_ID') },
   };
-  if (!body.live) return json({ version: WORKER_VERSION, secrets });
+  const infra = {
+    kv: !!env.ADS_KV,
+    mutations_enabled: String(env.ALLOW_MUTATIONS).toLowerCase() === 'true',
+    cache_ttl_seconds: Math.max(60, Number(env.CACHE_TTL || 900)),
+  };
+  if (!body.live) return json({ version: WORKER_VERSION, secrets, infra });
 
   // Live probes — each is the cheapest authenticated call the platform has.
   // A probe that can't run because nothing is configured reports 'skip'.
@@ -206,7 +275,354 @@ async function health(body, env) {
       return { ok: true, detail: 'API key accepted' };
     }),
   ]);
-  return json({ version: WORKER_VERSION, secrets, checks });
+  return json({ version: WORKER_VERSION, secrets, infra, checks });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PERSISTENCE & MONITORING (needs the ADS_KV binding)
+   ---------------------------------------------------------------------------
+   spendSnapshot  – stores yesterday's account-level spend per client per
+                    platform under hist:<date>; runs from the cron trigger
+                    and dedupes, so multiple crons a day are safe.
+   historyGet     – returns stored snapshots (the app's baselines + trends).
+   runMonitors    – compares the latest snapshot against the trailing week:
+                    spend spikes, collapses, accounts that stopped spending,
+                    and monthly-budget exhaustion forecasts (when a client in
+                    CLIENTS_JSON declares monthlyBudget). Alerts go out over
+                    WhatsApp from the cron.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+async function spendSnapshot(env, force) {
+  if (!env.ADS_KV) return { error: 'ADS_KV namespace is not bound — create a KV namespace and bind it as ADS_KV' };
+  const y = new Date(); y.setUTCHours(0, 0, 0, 0); y.setUTCDate(y.getUTCDate() - 1);
+  const date = y.toISOString().slice(0, 10);
+  if (!force && await env.ADS_KV.get('hist:' + date)) return { skipped: 'already stored', date };
+
+  const clients = await waClients(env);
+  const num = (v) => { const n = parseFloat(v); return isFinite(n) ? n : 0; };
+  const rows = [];
+  const push = (c, platform, spend, imp, clk, cur) =>
+    rows.push({ client: c.name, platform, spend: +num(spend).toFixed(2),
+      impressions: Math.round(num(imp)), clicks: Math.round(num(clk)), currency: cur || c.currency || 'USD' });
+
+  await Promise.all(clients.map(async (c) => {
+    const jobs = [];
+    if (c.meta && c.meta.act) jobs.push((async () => {
+      const j = await (await metaAds({ adAccountId: c.meta.act, path: '/insights',
+        params: { level: 'account', fields: 'spend,impressions,clicks,account_currency',
+          time_range: JSON.stringify({ since: date, until: date }) } }, env)).json();
+      const r = (j.data || [])[0] || {};
+      if (!j.error) push(c, 'meta', r.spend, r.impressions, r.clicks, r.account_currency);
+    })().catch(() => {}));
+    if (c.google && c.google.cid) jobs.push((async () => {
+      const j = await (await googleAds({ customerId: c.google.cid, managerId: c.google.mgr,
+        gaql: `SELECT customer.currency_code, metrics.cost_micros, metrics.impressions, metrics.clicks FROM customer WHERE segments.date = '${date}'` }, env)).json();
+      let s = 0, i = 0, k = 0, cur = null;
+      (j.results || []).forEach((x) => { s += num(x.metrics && x.metrics.costMicros) / 1e6;
+        i += num(x.metrics && x.metrics.impressions); k += num(x.metrics && x.metrics.clicks);
+        cur = (x.customer && x.customer.currencyCode) || cur; });
+      if (!j.error) push(c, 'google', s, i, k, cur);
+    })().catch(() => {}));
+    if (c.tiktok && c.tiktok.adv) jobs.push((async () => {
+      const j = await (await tiktokAds({ advertiserId: c.tiktok.adv, action: 'report',
+        dimensions: ['advertiser_id'], metrics: ['spend', 'impressions', 'clicks'],
+        startDate: date, endDate: date }, env)).json();
+      const m = ((j.data || [])[0] || {}).metrics || (j.data || [])[0] || {};
+      if (!j.error) push(c, 'tiktok', m.spend, m.impressions, m.clicks, c.tiktok.cur);
+    })().catch(() => {}));
+    if (c.linkedin && c.linkedin.acct) jobs.push((async () => {
+      const j = await (await linkedinAds({ accountId: c.linkedin.acct, action: 'analytics', pivot: 'ACCOUNT',
+        startDate: date, endDate: date }, env)).json();
+      let s = 0, i = 0, k = 0;
+      (j.data || []).forEach((x) => { s += num(x.costInLocalCurrency); i += num(x.impressions); k += num(x.clicks); });
+      if (!j.error) push(c, 'linkedin', s, i, k, c.linkedin.cur);
+    })().catch(() => {}));
+    if (c.pinterest && c.pinterest.acct) jobs.push((async () => {
+      const j = await (await pinterestAds({ accountId: c.pinterest.acct, action: 'analytics',
+        startDate: date, endDate: date }, env)).json();
+      const r = (j.data || [])[0] || {};
+      if (!j.error) push(c, 'pinterest', r.SPEND, r.IMPRESSION_2, r.CLICKTHROUGH_2, c.pinterest.cur);
+    })().catch(() => {}));
+    if (c.reddit && c.reddit.acct) jobs.push((async () => {
+      const j = await (await redditAds({ accountId: c.reddit.acct, action: 'report',
+        breakdowns: ['campaign_id'], fields: ['spend', 'impressions', 'clicks'],
+        startDate: date, endDate: date }, env)).json();
+      let s = 0, i = 0, k = 0;
+      (j.data || []).forEach((x) => { s += num(x.spend); i += num(x.impressions); k += num(x.clicks); });
+      if (!j.error) push(c, 'reddit', s, i, k, c.reddit.cur);
+    })().catch(() => {}));
+    await Promise.all(jobs);
+  }));
+
+  const snap = { date, rows, created: Date.now() };
+  await env.ADS_KV.put('hist:' + date, JSON.stringify(snap), { expirationTtl: 60 * 60 * 24 * 400 });
+  return { stored: true, date, rows: rows.length };
+}
+
+async function getSnaps(env, days) {
+  const out = await Promise.all(Array.from({ length: days }, (_, i) => {
+    const d = new Date(); d.setUTCHours(0, 0, 0, 0); d.setUTCDate(d.getUTCDate() - 1 - i);
+    return env.ADS_KV.get('hist:' + d.toISOString().slice(0, 10))
+      .then((v) => { try { return v ? JSON.parse(v) : null; } catch (_) { return null; } });
+  }));
+  return out.filter(Boolean).reverse();   // oldest → newest
+}
+
+async function historyGet(body, env) {
+  if (!env.ADS_KV) return json({ error: 'ADS_KV namespace is not bound — create a KV namespace and bind it as ADS_KV to enable spend history' });
+  const snapshots = await getSnaps(env, Math.min(Number(body.days) || 30, 120));
+  return json({ snapshots, total: snapshots.length });
+}
+
+async function runMonitors(env) {
+  if (!env.ADS_KV) return { error: 'ADS_KV not bound — monitors need spend history', alerts: [] };
+  const snaps = await getSnaps(env, 8);
+  if (!snaps.length) return { alerts: [], note: 'no snapshots yet — run source:"snapshot" once, or wait for the cron' };
+  const latest = snaps[snaps.length - 1];
+  const money = (n, cur) => (cur || '$') + ' ' + (Math.round(Number(n) * 100) / 100).toLocaleString('en-US');
+
+  const key = (r) => r.client + '·' + r.platform;
+  const base = {};
+  snaps.slice(0, -1).forEach((s) => (s.rows || []).forEach((r) => { (base[key(r)] = base[key(r)] || []).push(r.spend); }));
+
+  const alerts = [];
+  (latest.rows || []).forEach((r) => {
+    const b = base[key(r)] || [];
+    if (b.length < 3) return;                                    // not enough baseline
+    const avg = b.reduce((a, x) => a + x, 0) / b.length;
+    if (avg < 5) return;                                         // too small to judge
+    const ratio = r.spend / avg;
+    const who = r.client + ' · ' + r.platform;
+    if (r.spend === 0) alerts.push({ sev: 'high', type: 'stopped', client: r.client, platform: r.platform,
+      msg: who + ': spent NOTHING on ' + latest.date + ' vs ' + money(avg, r.currency) + '/day average — check billing, budgets and disapprovals' });
+    else if (ratio >= 1.8) alerts.push({ sev: 'high', type: 'spike', client: r.client, platform: r.platform,
+      msg: who + ': spend spiked to ' + money(r.spend, r.currency) + ' (' + latest.date + ') vs ' + money(avg, r.currency) + '/day average (×' + ratio.toFixed(1) + ')' });
+    else if (ratio <= 0.35) alerts.push({ sev: 'med', type: 'collapse', client: r.client, platform: r.platform,
+      msg: who + ': spend collapsed to ' + money(r.spend, r.currency) + ' vs ' + money(avg, r.currency) + '/day average' });
+  });
+
+  /* Budget-exhaustion forecasts — only for clients that declare monthlyBudget. */
+  const clients = await waClients(env);
+  const budgeted = clients.filter((c) => Number(c.monthlyBudget) > 0);
+  if (budgeted.length) {
+    const now = new Date();
+    const monthKey = now.toISOString().slice(0, 7);
+    const daysInMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate();
+    const monthSnaps = (await getSnaps(env, 32)).filter((s) => s.date.slice(0, 7) === monthKey);
+    budgeted.forEach((c) => {
+      const spent = monthSnaps.reduce((s, sn) => s + (sn.rows || []).filter((r) => r.client === c.name)
+        .reduce((a, r) => a + r.spend, 0), 0);
+      const elapsed = monthSnaps.length;
+      if (!elapsed || spent <= 0) return;
+      const rate = spent / elapsed;
+      const projected = spent + rate * (daysInMonth - elapsed);
+      const cur = (c.currency || (monthSnaps[0] && (monthSnaps[0].rows.find((r) => r.client === c.name) || {}).currency)) || '';
+      if (projected > c.monthlyBudget) {
+        const exhaustIn = Math.max(0, Math.floor((c.monthlyBudget - spent) / rate));
+        const exhaustDate = new Date(now.getTime() + exhaustIn * 864e5).toISOString().slice(0, 10);
+        alerts.push({ sev: projected > c.monthlyBudget * 1.15 ? 'high' : 'med', type: 'budget', client: c.name,
+          msg: c.name + ': on pace to spend ' + money(projected, cur) + ' of a ' + money(c.monthlyBudget, cur) +
+            ' monthly budget (' + Math.round(projected / c.monthlyBudget * 100) + '%) — exhausts ~' + exhaustDate });
+      } else if (projected < c.monthlyBudget * 0.8) {
+        alerts.push({ sev: 'low', type: 'budget', client: c.name,
+          msg: c.name + ': projected ' + money(projected, cur) + ' vs ' + money(c.monthlyBudget, cur) +
+            ' monthly budget (' + Math.round(projected / c.monthlyBudget * 100) + '%) — underspending' });
+      }
+    });
+  }
+
+  const order = { high: 0, med: 1, low: 2 };
+  alerts.sort((a, b) => order[a.sev] - order[b.sev]);
+  return { date: latest.date, alerts, baseline_days: snaps.length - 1 };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MUTATIONS — pause / enable / daily budget, behind two locks:
+   1. ALLOW_MUTATIONS secret must be "true" (default: everything read-only)
+   2. the app shows an approval card and only calls after a human clicks
+   Every attempt is written to the KV audit log when ADS_KV is bound.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+async function mutate(body, env) {
+  if (String(env.ALLOW_MUTATIONS).toLowerCase() !== 'true')
+    return json({ error: 'Mutations are disabled on this worker (read-only mode). Set the ALLOW_MUTATIONS secret to "true" to enable pause/enable/budget changes.' });
+  const { platform, action, campaignId } = body;
+  if (!platform || !action || !campaignId) return json({ error: 'platform, action and campaignId are required' });
+  const audit = async (ok, detail) => {
+    if (!env.ADS_KV) return;
+    const entry = { ts: Date.now(), platform, action, campaignId: String(campaignId),
+      campaignName: body.campaignName || null, client: body.client || null,
+      amount: body.amount != null ? Number(body.amount) : null, ok, detail };
+    await env.ADS_KV.put('audit:' + String(entry.ts).padStart(14, '0') + ':' + Math.random().toString(36).slice(2, 6),
+      JSON.stringify(entry), { expirationTtl: 60 * 60 * 24 * 180 }).catch(() => {});
+  };
+  const amount = Number(body.amount);
+  if (action === 'budget') {
+    if (!(amount > 0)) return json({ error: 'budget action needs a positive "amount" — the new DAILY budget in the account currency' });
+    const cap = Number(env.MUTATION_MAX_BUDGET || 0);
+    if (cap && amount > cap) {
+      await audit(false, 'refused: amount ' + amount + ' exceeds MUTATION_MAX_BUDGET (' + cap + ')');
+      return json({ error: 'Amount ' + amount + ' exceeds MUTATION_MAX_BUDGET (' + cap + ') set on the worker' });
+    }
+  }
+  let result;
+  try {
+    if (platform === 'meta')          result = await metaMutate(body, env, amount);
+    else if (platform === 'google')   result = await googleMutate(body, env, amount);
+    else if (platform === 'tiktok')   result = await tiktokMutate(body, env, amount);
+    else if (platform === 'linkedin') result = await linkedinMutate(body, env);
+    else if (platform === 'pinterest') result = await pinterestMutate(body, env, amount);
+    else if (platform === 'reddit')   result = await redditMutate(body, env);
+    else result = { error: 'Unknown platform: ' + platform };
+  } catch (e) { result = { error: String((e && e.message) || e) }; }
+
+  await audit(!result.error, result.error || 'applied');
+  return json(result.error ? { error: result.error } : { ok: true, ...result });
+}
+
+async function metaMutate(body, env, amount) {
+  const token = env.META_ACCESS_TOKEN;
+  if (!token) return { error: 'META_ACCESS_TOKEN not set' };
+  const p = new URLSearchParams({ access_token: token });
+  if (body.action === 'pause') p.set('status', 'PAUSED');
+  else if (body.action === 'enable') p.set('status', 'ACTIVE');
+  else if (body.action === 'budget') p.set('daily_budget', String(Math.round(amount * 100)));   // cents
+  else return { error: 'Unsupported action for Meta: ' + body.action };
+  const d = await (await fetch(`https://graph.facebook.com/${META_V}/${body.campaignId}`, { method: 'POST', body: p })).json();
+  if (d.error) return { error: 'Facebook: ' + d.error.message };
+  return { platform: 'meta', action: body.action, campaignId: String(body.campaignId), applied: true };
+}
+
+async function googleMutate(body, env, amount) {
+  const dev = env.GOOGLE_ADS_DEVELOPER_TOKEN;
+  if (!dev) return { error: 'GOOGLE_ADS_DEVELOPER_TOKEN not set' };
+  const tok = await googleAccessToken(env);
+  if (tok.error) return { error: tok.error };
+  const cid = String(body.customerId || env.GOOGLE_ADS_CUSTOMER_ID || '').replace(/-/g, '');
+  if (!cid) return { error: 'customerId is required for Google mutations' };
+  const headers = { Authorization: 'Bearer ' + tok.token, 'developer-token': dev, 'Content-Type': 'application/json' };
+  const mgr = String(body.managerId || env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || '').replace(/-/g, '');
+  if (mgr && mgr !== cid) headers['login-customer-id'] = mgr;
+
+  if (body.action === 'pause' || body.action === 'enable') {
+    const op = { update: { resourceName: `customers/${cid}/campaigns/${body.campaignId}`,
+      status: body.action === 'pause' ? 'PAUSED' : 'ENABLED' }, updateMask: 'status' };
+    const r = await fetch(`https://googleads.googleapis.com/${GOOGLE_V}/customers/${cid}/campaigns:mutate`,
+      { method: 'POST', headers, body: JSON.stringify({ operations: [op] }) });
+    const t = await r.text();
+    if (!r.ok) return { error: googleErr(r.status, t) };
+    return { platform: 'google', action: body.action, campaignId: String(body.campaignId), applied: true };
+  }
+  if (body.action === 'budget') {
+    // Budgets live on their own resource — find the campaign's, then mutate it.
+    const rr = await fetch(`https://googleads.googleapis.com/${GOOGLE_V}/customers/${cid}/googleAds:searchStream`,
+      { method: 'POST', headers, body: JSON.stringify({ query: `SELECT campaign.campaign_budget FROM campaign WHERE campaign.id = ${Number(body.campaignId)}` }) });
+    const tt = await rr.text();
+    if (!rr.ok) return { error: googleErr(rr.status, tt) };
+    let bres = null;
+    try { const b = JSON.parse(tt);
+      (Array.isArray(b) ? b : [b]).forEach((x) => (x.results || []).forEach((y) => { bres = y.campaign && y.campaign.campaignBudget; })); } catch (_) {}
+    if (!bres) return { error: 'Could not find the budget resource for campaign ' + body.campaignId };
+    const op = { update: { resourceName: bres, amountMicros: String(Math.round(amount * 1e6)) }, updateMask: 'amount_micros' };
+    const r = await fetch(`https://googleads.googleapis.com/${GOOGLE_V}/customers/${cid}/campaignBudgets:mutate`,
+      { method: 'POST', headers, body: JSON.stringify({ operations: [op] }) });
+    const t = await r.text();
+    if (!r.ok) return { error: googleErr(r.status, t) };
+    return { platform: 'google', action: 'budget', campaignId: String(body.campaignId), amount, applied: true,
+      note: 'If this budget is shared, every campaign using it changes too' };
+  }
+  return { error: 'Unsupported action for Google: ' + body.action };
+}
+
+async function tiktokMutate(body, env, amount) {
+  const token = env.TIKTOK_ACCESS_TOKEN || body.accessToken;
+  const adv = body.advertiserId || env.TIKTOK_ADVERTISER_ID;
+  if (!token) return { error: 'TikTok not configured (TIKTOK_ACCESS_TOKEN)' };
+  if (!adv) return { error: 'advertiserId is required for TikTok mutations' };
+  const base = 'https://business-api.tiktok.com/open_api/v1.3';
+  const post = async (ep, payload) => (await fetch(base + ep, { method: 'POST',
+    headers: { 'Access-Token': token, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })).json();
+  let d;
+  if (body.action === 'pause' || body.action === 'enable')
+    d = await post('/campaign/status/update/', { advertiser_id: adv, campaign_ids: [String(body.campaignId)],
+      operation: body.action === 'pause' ? 'DISABLE' : 'ENABLE' });
+  else if (body.action === 'budget')
+    d = await post('/campaign/update/', { advertiser_id: adv, campaign_id: String(body.campaignId), budget: amount });
+  else return { error: 'Unsupported action for TikTok: ' + body.action };
+  if (d.code !== 0) { const fx = tiktokFix(d.code);
+    return { error: 'TikTok ' + d.code + ': ' + (d.message || 'error') + (fx ? ' — FIX: ' + fx : '') }; }
+  return { platform: 'tiktok', action: body.action, campaignId: String(body.campaignId), applied: true };
+}
+
+async function linkedinMutate(body, env) {
+  const token = env.LINKEDIN_ACCESS_TOKEN || body.accessToken;
+  if (!token) return { error: 'LinkedIn mutations need LINKEDIN_ACCESS_TOKEN (run the Connection Doctor if it expired)' };
+  const acct = String(body.accountId || env.LINKEDIN_AD_ACCOUNT_ID || '').replace(/^urn:li:sponsoredAccount:/, '');
+  if (!acct) return { error: 'accountId is required for LinkedIn mutations' };
+  if (body.action !== 'pause' && body.action !== 'enable')
+    return { error: 'Only pause/enable are supported for LinkedIn (budget changes are not wired yet)' };
+  const r = await fetch(`https://api.linkedin.com/rest/adAccounts/${acct}/adCampaigns/${String(body.campaignId).replace(/^urn:li:sponsoredCampaign:/, '')}`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token, 'LinkedIn-Version': env.LINKEDIN_VERSION || '202506',
+      'X-Restli-Protocol-Version': '2.0.0', 'X-RestLi-Method': 'PARTIAL_UPDATE', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ patch: { $set: { status: body.action === 'pause' ? 'PAUSED' : 'ACTIVE' } } }),
+  });
+  if (!r.ok) { const t = await r.text(); return { error: 'LinkedIn ' + r.status + ': ' + t.slice(0, 200) }; }
+  return { platform: 'linkedin', action: body.action, campaignId: String(body.campaignId), applied: true };
+}
+
+async function pinterestMutate(body, env, amount) {
+  const token = env.PINTEREST_ACCESS_TOKEN || body.accessToken;
+  if (!token) return { error: 'Pinterest not configured (PINTEREST_ACCESS_TOKEN)' };
+  const acct = String(body.accountId || env.PINTEREST_AD_ACCOUNT_ID || '').trim();
+  if (!acct) return { error: 'accountId is required for Pinterest mutations' };
+  const patch = { id: String(body.campaignId) };
+  if (body.action === 'pause') patch.status = 'PAUSED';
+  else if (body.action === 'enable') patch.status = 'ACTIVE';
+  else if (body.action === 'budget') patch.daily_spend_cap = Math.round(amount * 1e6);   // micro-currency
+  else return { error: 'Unsupported action for Pinterest: ' + body.action };
+  const r = await fetch(`https://api.pinterest.com/v5/ad_accounts/${acct}/campaigns`, {
+    method: 'PATCH', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify([patch]),
+  });
+  const t = await r.text();
+  if (!r.ok) return { error: 'Pinterest ' + r.status + ': ' + t.slice(0, 200) };
+  return { platform: 'pinterest', action: body.action, campaignId: String(body.campaignId), applied: true };
+}
+
+async function redditMutate(body, env) {
+  let token = env.REDDIT_ACCESS_TOKEN || body.accessToken;
+  if (!token && env.REDDIT_REFRESH_TOKEN && env.REDDIT_CLIENT_ID && env.REDDIT_CLIENT_SECRET) {
+    const d = await (await fetch('https://www.reddit.com/api/v1/access_token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'cmm-ads-intelligence/1.0',
+        Authorization: 'Basic ' + btoa(env.REDDIT_CLIENT_ID + ':' + env.REDDIT_CLIENT_SECRET) },
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: env.REDDIT_REFRESH_TOKEN }),
+    })).json().catch(() => null);
+    if (d && d.access_token) token = d.access_token;
+  }
+  if (!token) return { error: 'Reddit not configured' };
+  const acct = String(body.accountId || env.REDDIT_AD_ACCOUNT_ID || '').trim();
+  if (!acct) return { error: 'accountId is required for Reddit mutations' };
+  if (body.action !== 'pause' && body.action !== 'enable')
+    return { error: 'Only pause/enable are supported for Reddit (budgets live on ad groups, not campaigns)' };
+  const r = await fetch(`https://ads-api.reddit.com/api/v3/ad_accounts/${acct}/campaigns/${body.campaignId}`, {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', 'User-Agent': 'cmm-ads-intelligence/1.0' },
+    body: JSON.stringify({ data: { configured_status: body.action === 'pause' ? 'PAUSED' : 'ACTIVE' } }),
+  });
+  const t = await r.text();
+  if (!r.ok) return { error: 'Reddit ' + r.status + ': ' + t.slice(0, 200) };
+  return { platform: 'reddit', action: body.action, campaignId: String(body.campaignId), applied: true };
+}
+
+async function auditLog(body, env) {
+  if (!env.ADS_KV) return json({ error: 'ADS_KV not bound — there is no audit log without it' });
+  const l = await env.ADS_KV.list({ prefix: 'audit:', limit: 200 });
+  const entries = (await Promise.all((l.keys || []).map((k) =>
+    env.ADS_KV.get(k.name).then((v) => { try { return JSON.parse(v); } catch (_) { return null; } }))))
+    .filter(Boolean).sort((a, b) => b.ts - a.ts).slice(0, Math.min(Number(body.limit) || 50, 200));
+  return json({ entries, total: entries.length });
 }
 
 /* Google Ads errors arrive as deep JSON — surface the real message + code. */
@@ -292,7 +708,7 @@ async function googleAccounts(env) {
   // With a manager account, list the clients under it (names included).
   if (mgr) {
     headers['login-customer-id'] = mgr;
-    const q = `SELECT customer_client.id, customer_client.descriptive_name, customer_client.manager, customer_client.status
+    const q = `SELECT customer_client.id, customer_client.descriptive_name, customer_client.manager, customer_client.status, customer_client.currency_code
                FROM customer_client WHERE customer_client.status = 'ENABLED'`;
     const res = await fetch(`https://googleads.googleapis.com/${GOOGLE_V}/customers/${mgr}/googleAds:searchStream`,
       { method: 'POST', headers, body: JSON.stringify({ query: q }) });
@@ -303,7 +719,7 @@ async function googleAccounts(env) {
       (Array.isArray(batches) ? batches : [batches]).forEach((b) => (b.results || []).forEach((r) => {
         const c = r.customerClient || {};
         if (c.manager) return;                       // skip manager nodes, keep real accounts
-        accounts.push({ id: String(c.id), name: c.descriptiveName || String(c.id) });
+        accounts.push({ id: String(c.id), name: c.descriptiveName || String(c.id), currency: c.currencyCode });
       }));
       return json({ accounts });
     }
@@ -334,8 +750,11 @@ async function tiktokAccounts(body, env) {
   const info = await (await fetch(`${base}/advertiser/info/?advertiser_ids=${encodeURIComponent(JSON.stringify(ids))}`,
     { headers: { 'Access-Token': token } })).json();
   const names = {};
-  if (info.code === 0) ((info.data && info.data.list) || []).forEach((a) => { names[a.advertiser_id] = a.name || a.advertiser_name; });
-  return json({ accounts: ids.map((id) => ({ id: String(id), name: names[id] || String(id) })) });
+  if (info.code === 0) ((info.data && info.data.list) || []).forEach((a) => {
+    names[a.advertiser_id] = { name: a.name || a.advertiser_name, currency: a.currency };
+  });
+  return json({ accounts: ids.map((id) => ({ id: String(id),
+    name: (names[id] && names[id].name) || String(id), currency: names[id] && names[id].currency })) });
 }
 
 async function linkedinAccounts(body, env) {
@@ -347,7 +766,7 @@ async function linkedinAccounts(body, env) {
   const t = await r.text();
   let d; try { d = JSON.parse(t); } catch (_) { d = null; }
   if (!r.ok) return json({ error: 'LinkedIn ' + r.status + ': ' + ((d && d.message) || t.slice(0, 200)) });
-  const accounts = ((d && d.elements) || []).map((a) => ({ id: String(a.id), name: a.name || String(a.id) }));
+  const accounts = ((d && d.elements) || []).map((a) => ({ id: String(a.id), name: a.name || String(a.id), currency: a.currency }));
   return json({ accounts });
 }
 
@@ -502,6 +921,15 @@ async function tiktokAds(body, env) {
     }
     return q.toString();
   };
+
+  // Advertiser record — the account's own name / currency / timezone.
+  if (action === 'advertiser_info') {
+    const info = await (await fetch(`${base}/advertiser/info/?advertiser_ids=${encodeURIComponent(JSON.stringify([String(adv)]))}`,
+      { headers: { 'Access-Token': token } })).json();
+    if (info.code !== 0) return json({ error: 'TikTok ' + info.code + ': ' + (info.message || 'error') });
+    const a = ((info.data && info.data.list) || [])[0] || {};
+    return json({ data: [a], total: 1, currency: a.currency });
+  }
 
   // TikTok BASIC reports require an explicit date range — default to last 30 days.
   const day = (d) => d.toISOString().slice(0, 10);
@@ -741,6 +1169,13 @@ async function pinterestAds(body, env) {
 
   if (!acctId) return json({ error: 'No Pinterest ad account ID — set it in the app Configuration, or use action:"accounts" to list accessible accounts' });
 
+  // The ad-account record itself — name / currency / country.
+  if (action === 'account') {
+    const r = await pFetch(`${BASE}/ad_accounts/${acctId}`);
+    if (r.error) return json(r);
+    return json({ data: [r.data], total: 1, currency: r.data && r.data.currency });
+  }
+
   if (action === 'campaigns') {
     let url = `${BASE}/ad_accounts/${acctId}/campaigns?page_size=100`;
     if (body.statuses) url += '&entity_statuses=' + encodeURIComponent([].concat(body.statuses).join(','));
@@ -857,6 +1292,14 @@ async function redditAds(body, env) {
   }
 
   if (!acctId) return json({ error: 'No Reddit ad account ID — set it in the app Configuration, or use action:"accounts" to list accessible accounts' });
+
+  // The ad-account record itself — name / currency.
+  if (action === 'account') {
+    const r = await rFetch(`${BASE}/ad_accounts/${acctId}`);
+    if (r.error) return json(r);
+    const a = (r.data && r.data.data) || {};
+    return json({ data: [a], total: 1, currency: a.currency });
+  }
 
   if (action === 'campaigns') {
     const r = await rFetch(`${BASE}/ad_accounts/${acctId}/campaigns?page.size=100`);

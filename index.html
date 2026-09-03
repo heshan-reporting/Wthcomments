@@ -1771,6 +1771,57 @@ async function metaQuery(path,params,useAsync,sel){
   });
 }
 
+/* ── campaign mutations: approval card + worker call ──────────────── */
+function confirmMutation(inp){
+  return new Promise(function(res){
+    removeWelcome(); const w=getMwrap();
+    const el=document.createElement('div'); el.className='msg ai';
+    const av=document.createElement('div'); av.className='ai-av mavatar'; av.innerHTML='<div class="msg-orb"></div>';
+    const box=document.createElement('div'); box.className='mbody';
+    const card=document.createElement('div');
+    card.style.cssText='border:1px solid var(--amb);border-radius:12px;padding:14px 16px;max-width:540px;background:rgba(255,190,60,.06)';
+    const h=document.createElement('div'); h.style.cssText='font-weight:700;margin-bottom:6px;color:var(--amb);font-size:13px';
+    h.textContent='⚠ Approval required — live campaign change';
+    const d=document.createElement('div'); d.style.cssText='font-size:13px;line-height:1.55';
+    const what=inp.action==='budget'?('Set the DAILY budget to '+inp.amount):(inp.action==='pause'?'PAUSE':'ENABLE');
+    d.textContent=what+' — "'+(inp.campaignName||inp.campaignId)+'" on '+(inp.platform||'?')+
+      (inp.client?' · '+inp.client:'')+(inp.currentValue?' · currently '+inp.currentValue:'');
+    const btns=document.createElement('div'); btns.style.cssText='display:flex;gap:8px;margin-top:12px';
+    const ok=document.createElement('button'); ok.textContent='Approve change';
+    ok.style.cssText='background:var(--amb);color:#1a1408;border:0;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer;font-family:inherit;font-size:12.5px';
+    const no=document.createElement('button'); no.textContent='Cancel';
+    no.style.cssText='background:transparent;color:var(--text-2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer;font-family:inherit;font-size:12.5px';
+    const done=function(v,label){
+      ok.disabled=no.disabled=true; ok.style.opacity=no.style.opacity=.45;
+      const s=document.createElement('div'); s.style.cssText='margin-top:9px;font-size:12px;color:var(--text-3)';
+      s.textContent=label; card.appendChild(s); res(v);
+    };
+    ok.addEventListener('click',function(){done(true,'Approved — applying…');});
+    no.addEventListener('click',function(){done(false,'Cancelled — no change was made.');});
+    btns.appendChild(ok); btns.appendChild(no);
+    card.appendChild(h); card.appendChild(d); card.appendChild(btns);
+    box.appendChild(card); el.appendChild(av); el.appendChild(box);
+    w.appendChild(el); scrollBot();
+  });
+}
+
+async function mutateCall(inp){
+  if(!cfg.wurl)return{error:'No Worker URL — open Configuration'};
+  const plat=inp.platform;
+  const targets=resolveClients(inp.client?[inp.client]:undefined,plat);
+  const c=targets[0];
+  if(!c)return{error:'No client with '+plat+' configured'+(inp.client?' matching "'+inp.client+'"':'')+'. Use list_clients.'};
+  const body={source:'mutate',platform:plat,action:inp.action,campaignId:String(inp.campaignId),
+    campaignName:inp.campaignName||'',client:c.name};
+  if(inp.amount!=null)body.amount=inp.amount;
+  if(plat==='google'){ body.customerId=c.google.cid; var mgr=c.google.mgr||cfg.gmgr; if(mgr)body.managerId=mgr; }
+  if(plat==='tiktok'){ body.advertiserId=c.tiktok.adv; if(cfg.tttoken)body.accessToken=cfg.tttoken; }
+  if(plat==='linkedin'){ body.accountId=c.linkedin.acct; if(cfg.litoken)body.accessToken=cfg.litoken; if(cfg.lirefresh)body.refreshToken=cfg.lirefresh; }
+  if(plat==='pinterest'){ body.accountId=c.pinterest.acct; if(cfg.pttoken)body.accessToken=cfg.pttoken; if(cfg.ptrefresh)body.refreshToken=cfg.ptrefresh; }
+  if(plat==='reddit'){ body.accountId=c.reddit.acct; if(cfg.rdtoken)body.accessToken=cfg.rdtoken; if(cfg.rdrefresh)body.refreshToken=cfg.rdrefresh; }
+  return callWorker(body);
+}
+
 // ── Claude tools ──────────────────────────────────────────────────────────────
 const TOOLS=[
   {
@@ -2147,6 +2198,29 @@ EXAMPLES:
       accountId:{type:'string',description:'Override the default ad account ID'},
       description:{type:'string',description:'One-line description shown in UI'}
     },required:['description']}
+  },
+  {
+    name:'manage_campaign',
+    description:`Change a LIVE campaign: pause it, enable it, or set its daily budget. Calling this tool shows the user an approval card — the change is only applied after they click Approve, and every attempt is written to an audit log.
+
+RULES — NON-NEGOTIABLE:
+- Look the campaign up FIRST with the platform's query tool so you have its exact ID, exact name, current status and current budget. NEVER guess an ID.
+- One call per campaign. Never batch changes the user did not individually ask for.
+- In your text BEFORE calling, state precisely what will change and its current value, e.g. 'Pausing "Brand Search AU" on Google for Acme (currently ENABLED, A$120/day)'.
+- amount is the new DAILY budget in the ACCOUNT'S OWN currency.
+- Supported: pause/enable on Google, Meta, TikTok, LinkedIn, Pinterest, Reddit. Daily budget on Google, Meta, TikTok, Pinterest (LinkedIn/Reddit budgets are not wired).
+- If the worker replies that mutations are disabled, tell the user to add the ALLOW_MUTATIONS="true" secret on the Cloudflare Worker — the whole system is read-only until they do.
+- If the user declines on the card, accept it. Do not retry or argue.`,
+    input_schema:{type:'object',properties:{
+      platform:{type:'string',description:'google | meta | tiktok | linkedin | pinterest | reddit'},
+      client:{type:'string',description:'Client name (from list_clients) whose account holds the campaign'},
+      campaignId:{type:'string',description:'Exact campaign ID from a prior lookup'},
+      campaignName:{type:'string',description:'Exact campaign name — shown on the approval card'},
+      action:{type:'string',description:'pause | enable | budget'},
+      amount:{type:'number',description:'For action=budget only: the new DAILY budget in the account currency'},
+      currentValue:{type:'string',description:'Current status/budget for the approval card, e.g. "ENABLED, A$120/day"'},
+      description:{type:'string',description:'One-line description shown in UI'}
+    },required:['platform','campaignId','campaignName','action','description']}
   }];
 
 const DEFAULT_SYS=`You are the CMM Ads Intelligence assistant, built by Curious Minds Media.
@@ -2154,6 +2228,13 @@ You are a senior performance marketing analyst with expert-level knowledge of Go
 
 ## PLATFORMS
 You have SEVEN tools: list_clients (who the clients are and what each has connected), query_google_ads (Google Ads, GAQL via API v21), query_meta_ads (Meta), query_tiktok_ads (TikTok), query_linkedin_ads (LinkedIn), query_pinterest_ads (Pinterest), and query_reddit_ads (Reddit). Every platform tool queries one, several, or ALL clients at once via its "clients" parameter. Use the right tool per platform. For cross-platform questions, call all relevant tools and normalise currency, date range, and metric definitions before comparing. TikTok, LinkedIn, Pinterest and Reddit all default to the last 30 days when you omit dates. Pinterest spend: use the auto-added plain SPEND field (already divided from SPEND_IN_MICRO_DOLLAR). Reddit spend and cpc arrive already converted to plain currency units.
+
+## LIVE CAMPAIGN CHANGES (manage_campaign)
+You can pause/enable campaigns and set daily budgets, but ONLY through manage_campaign, which shows the user an approval card — nothing changes until they click Approve.
+- ALWAYS look the campaign up first (its exact ID, name, current status, current budget) with the platform's query tool, and state the change plus the current value in your text before calling.
+- One call per campaign; never batch changes the user did not individually name. Budget amounts are DAILY, in the account's own currency.
+- If the card is declined, accept it and move on. If the worker says mutations are disabled, the ALLOW_MUTATIONS secret must be set to "true" on the Cloudflare Worker.
+- After a successful change, confirm what changed and suggest verifying with a fresh query.
 
 ## MULTIPLE CLIENTS — READ THIS FIRST
 This workspace manages SEVERAL clients. Every platform tool takes a "clients" array.
@@ -2448,6 +2529,19 @@ async function ask(userMsg){
               }catch(_){rowInfo=`${(r.data.length/1024).toFixed(1)}kb`}
               card.ok(rowInfo);
             }
+          } else if(t.name==='manage_campaign'){
+            const inp=t.input;
+            status.phase('searching','Awaiting your approval');
+            const approved=await confirmMutation(inp);
+            if(!approved){
+              r={error:'The user DECLINED this change on the approval card. The campaign was NOT modified. Do not retry — ask what they would like instead.'};
+            }else{
+              const platClass=({google:1,meta:1,tiktok:1,linkedin:1,pinterest:1,reddit:1})[inp.platform]?inp.platform:'google';
+              const card=appendToolCard(platClass,inp.description||'Campaign change',
+                (inp.action||'')+' · '+(inp.campaignName||inp.campaignId));
+              r=await mutateCall(inp);
+              if(r.error){card.err('Failed')}else{card.ok('Applied')}
+            }
           } else if(t.name==='query_reddit_ads'){
             const inp=t.input;
             const detail=`${inp.action||'report'} · ${(inp.breakdowns||inp.fields||[]).slice(0,3).join(', ')}`;
@@ -2527,7 +2621,7 @@ async function discoverClients(){
   };
   /* find a client already holding this account id, else one with a matching
      name, else create — so re-running never duplicates rows */
-  const upsert=(plat,key,id,name)=>{
+  const upsert=(plat,key,id,name,currency)=>{
     if(!id)return;
     let c=clients.find(x=>x[plat]&&x[plat][key]===id);
     if(!c)c=clients.find(x=>(x.name||'').toLowerCase()===String(name||'').toLowerCase());
@@ -2535,17 +2629,20 @@ async function discoverClients(){
       google:{cid:'',mgr:''},meta:{act:''},tiktok:{adv:''},linkedin:{acct:''},pinterest:{acct:''},reddit:{acct:''}};
       clients.push(c); added++; }
     c[plat]=c[plat]||{}; c[plat][key]=id;
+    /* remember the account's own billing currency — everything downstream
+       labels money with this instead of assuming anything */
+    if(currency)c[plat].cur=currency;
     /* adopt the real account name over a placeholder from migration */
     if(!c.name||c.name==='Default client'||c.name===id)c.name=name||id;
   };
 
   try{ const d=await call({source:'meta_accounts'});
-    (d.accounts||[]).forEach(a=>upsert('meta','act',a.id,a.name));
+    (d.accounts||[]).forEach(a=>upsert('meta','act',a.id,a.name,a.currency));
   }catch(e){ problems.push('Meta: '+e.message); }
 
   for(const [src,plat,key] of [['google_accounts','google','cid'],['tiktok_accounts','tiktok','adv'],['linkedin_accounts','linkedin','acct'],['pinterest_accounts','pinterest','acct'],['reddit_accounts','reddit','acct']]){
     try{ const d=await call({source:src});
-      (d.accounts||[]).forEach(a=>upsert(plat,key,a.id,a.name));
+      (d.accounts||[]).forEach(a=>upsert(plat,key,a.id,a.name,a.currency));
     }catch(e){ /* older worker: unknown source — not fatal */ problems.push(plat+': '+e.message); }
   }
 
@@ -2566,7 +2663,7 @@ async function discoverClients(){
    One click answers "why is platform X not working": worker reachability,
    auth, worker version, then a live credential probe per platform with the
    exact fix. All probes run in the worker; no secret ever reaches here. */
-const EXPECTED_WORKER_VERSION='3.0.0';
+const EXPECTED_WORKER_VERSION='3.1.0';
 async function runDoctor(){
   const out=document.getElementById('doc-out'), btn=document.getElementById('doc-btn');
   out.style.display=''; out.innerHTML='';
@@ -2603,6 +2700,16 @@ async function runDoctor(){
     const vOk=j.version===EXPECTED_WORKER_VERSION;
     row(vOk?'✓':'△',vOk?'var(--grn)':'var(--amb)','Worker reachable · version '+(j.version||'unknown'),
       vOk?'Auth OK, running the latest code.':'This app expects version '+EXPECTED_WORKER_VERSION+' — redeploy worker.js from the repo to pick up the newest fixes.');
+    if(j.infra){
+      row(j.infra.kv?'✓':'○',j.infra.kv?'var(--grn)':'var(--text-3)',
+        'Persistence (cache · spend history · audit log)'+(j.infra.kv?' — on':' — off'),
+        j.infra.kv?'KV bound · query cache '+Math.round(j.infra.cache_ttl_seconds/60)+' min':
+        'Optional: Cloudflare dash → Storage & Databases → KV → create a namespace, bind it to the worker as "ADS_KV". Enables faster loads, spend history, anomaly monitoring and the mutation audit log.');
+      row(j.infra.mutations_enabled?'✓':'○',j.infra.mutations_enabled?'var(--grn)':'var(--text-3)',
+        'Campaign changes (pause / budget) — '+(j.infra.mutations_enabled?'ENABLED':'read-only'),
+        j.infra.mutations_enabled?'The AI can apply changes, but only after you click Approve on each one.':
+        'Optional: add an ALLOW_MUTATIONS secret set to "true" to let approved changes through. Everything stays read-only until then.');
+    }
     const LBL={meta:'Meta Ads',google:'Google Ads',tiktok:'TikTok Ads',linkedin:'LinkedIn Ads',pinterest:'Pinterest Ads',reddit:'Reddit Ads',anthropic:'AI engine (Anthropic key on worker)'};
     (j.checks||[]).forEach(c=>{
       const name=LBL[c.name]||c.name;
