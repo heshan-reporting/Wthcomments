@@ -414,6 +414,8 @@ html,body{height:100%;overflow:hidden;font-family:var(--fm);background:var(--bg)
 .tool-card.google .tool-icon{color:var(--cyan)}
 .tool-card.meta .tool-icon,.tool-card.linkedin .tool-icon{color:var(--fb)}
 .tool-card.tiktok .tool-icon{color:#e0e0e0}
+.tool-card.pinterest .tool-icon,.tool-card.pinterest .tool-lbl{color:#f87171}
+.tool-card.reddit .tool-icon,.tool-card.reddit .tool-lbl{color:#fb923c}
 .tool-info{flex:1;min-width:0}
 .tool-lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px;display:flex;align-items:center;gap:6px}
 .tool-card.google .tool-lbl{color:var(--cyan)}
@@ -1310,6 +1312,38 @@ textarea:focus,input:focus{outline:none}
         <div class="fhint">Auto-renews an expired access token, but only if the LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET secrets are also set on your Cloudflare Worker. Otherwise re-enter the access token every 60 days.</div>
         <input type="password" id="c-lirefresh" placeholder="Your LinkedIn refresh token">
       </div>
+      <div class="fdiv"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#E60023;margin-right:8px"></span>Pinterest Ads</div>
+      <div class="fld">
+        <label>Pinterest Access Token</label>
+        <div class="fhint">OAuth token from a Pinterest app with the <code>ads:read</code> scope. Prefer the PINTEREST_ACCESS_TOKEN worker secret; this field is the fallback.</div>
+        <input type="password" id="c-pttoken" placeholder="Your Pinterest access token">
+      </div>
+      <div class="fld">
+        <label>Pinterest Ad Account ID</label>
+        <div class="fhint">Numeric ID from ads.pinterest.com — it's in the URL: ads.pinterest.com/advertiser/{id}/</div>
+        <input type="text" id="c-ptacct" placeholder="549812345678">
+      </div>
+      <div class="fld">
+        <label>Pinterest Refresh Token <span style="font-weight:400;color:#8a9a8a">— optional, enables auto-refresh</span></label>
+        <div class="fhint">Auto-renews an expired access token if PINTEREST_CLIENT_ID and PINTEREST_CLIENT_SECRET secrets are also set on your Cloudflare Worker.</div>
+        <input type="password" id="c-ptrefresh" placeholder="Your Pinterest refresh token">
+      </div>
+      <div class="fdiv"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#FF4500;margin-right:8px"></span>Reddit Ads</div>
+      <div class="fld">
+        <label>Reddit Refresh Token <span style="font-weight:400;color:#8a9a8a">— recommended</span></label>
+        <div class="fhint">Reddit access tokens expire after 24 hours, so the refresh token (plus REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET worker secrets) is what keeps Reddit working unattended.</div>
+        <input type="password" id="c-rdrefresh" placeholder="Your Reddit refresh token">
+      </div>
+      <div class="fld">
+        <label>Reddit Ad Account ID</label>
+        <div class="fhint">From ads.reddit.com — Account settings, or the URL: ads.reddit.com/dashboard?account={id}</div>
+        <input type="text" id="c-rdacct" placeholder="t2_abc123 or numeric ID">
+      </div>
+      <div class="fld">
+        <label>Reddit Access Token <span style="font-weight:400;color:#8a9a8a">— optional, expires in 24h</span></label>
+        <div class="fhint">Only useful for quick tests — use the refresh token above for anything permanent.</div>
+        <input type="password" id="c-rdtoken" placeholder="Your Reddit access token">
+      </div>
       <div class="fdiv"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#25D366;margin-right:8px"></span>WhatsApp updates</div>
       <div class="fhint" style="margin-bottom:10px">Configured with worker secrets (WHATSAPP_TOKEN, WHATSAPP_PHONE_ID, WHATSAPP_RECIPIENTS). Scheduled digests come from the worker's Cron Trigger; these buttons let you check the setup.</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1414,7 +1448,7 @@ console.log(tokens.refresh_token);</code></pre>
 
 <script>
 // ── Config ────────────────────────────────────────────────────────────────────
-const CK=['key','model','wurl','wsec','gcid','gmgr','fbid','tttoken','ttadv','litoken','liacct','lirefresh','sys'];
+const CK=['key','model','wurl','wsec','gcid','gmgr','fbid','tttoken','ttadv','litoken','liacct','lirefresh','pttoken','ptacct','ptrefresh','rdtoken','rdacct','rdrefresh','sys'];
 let cfg={};
 function uKey(k){var uid=currentUser?currentUser.id:'guest';return 'cmm_'+uid+'_'+k;}
 const DEFAULT_WURL='https://ads-proxy.heshan-998.workers.dev/';
@@ -1548,7 +1582,7 @@ function appendToolCard(platform, desc, detail, isAsync){
   const el=document.createElement('div');el.className='msg ai';
   const uid='tc'+Date.now()+Math.random().toString(36).slice(2,7);
   const cls=platform; // 'meta' | 'google' | 'tiktok'
-  const lbl=platform==='meta'?'Meta Marketing API':(platform==='tiktok'?'TikTok Ads API':(platform==='linkedin'?'LinkedIn Marketing API':'Google Ads API'));
+  const lbl=platform==='meta'?'Meta Marketing API':(platform==='tiktok'?'TikTok Ads API':(platform==='linkedin'?'LinkedIn Marketing API':(platform==='pinterest'?'Pinterest Ads API':(platform==='reddit'?'Reddit Ads API':'Google Ads API'))));
   const asyncBadge=isAsync?`<span class="async-badge">ASYNC JOB</span>`:'';
   const searchIcon=`<svg class="tool-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`;
   el.innerHTML=`<div class="ai-av mavatar"><div class="msg-orb"></div></div><div class="mbody"><div class="tool-card ${cls}" data-status="p">${searchIcon}<div class="tool-info"><div class="tool-lbl">${lbl} ${asyncBadge}</div><div class="tool-desc">${esc(desc)}</div><div class="tool-query">${esc(detail)}</div></div><span class="tool-st p" id="${uid}">Fetching…</span></div></div>`;
@@ -1580,10 +1614,11 @@ function loadClients(){
   try{ clients=JSON.parse(localStorage.getItem(clientsKey())||'[]'); }catch(e){ clients=[]; }
   if(!Array.isArray(clients))clients=[];
   /* migrate a single-account setup into a first client so nothing is lost */
-  if(!clients.length&&(cfg.gcid||cfg.fbid||cfg.ttadv||cfg.liacct)){
+  if(!clients.length&&(cfg.gcid||cfg.fbid||cfg.ttadv||cfg.liacct||cfg.ptacct||cfg.rdacct)){
     clients=[{ id:'c'+Date.now(), name:'Default client',
       google:{cid:cfg.gcid||'',mgr:cfg.gmgr||''}, meta:{act:cfg.fbid||''},
-      tiktok:{adv:cfg.ttadv||''}, linkedin:{acct:cfg.liacct||''} }];
+      tiktok:{adv:cfg.ttadv||''}, linkedin:{acct:cfg.liacct||''},
+      pinterest:{acct:cfg.ptacct||''}, reddit:{acct:cfg.rdacct||''} }];
     storeClients();
   }
   return clients;
@@ -1595,6 +1630,8 @@ function clientHas(c,plat){
   if(plat==='meta')return !!(c.meta&&c.meta.act);
   if(plat==='tiktok')return !!(c.tiktok&&c.tiktok.adv);
   if(plat==='linkedin')return !!(c.linkedin&&c.linkedin.acct);
+  if(plat==='pinterest')return !!(c.pinterest&&c.pinterest.acct);
+  if(plat==='reddit')return !!(c.reddit&&c.reddit.acct);
   return false;
 }
 /* Resolve the tool's `clients` argument to real client records.
@@ -1682,6 +1719,30 @@ async function tiktokQuery(input,sel){
     var body={source:'tiktok_ads'};
     if(cfg.tttoken)body.accessToken=cfg.tttoken;
     body.advertiserId=c.tiktok.adv;
+    Object.keys(input).forEach(function(k){if(k!=='description'&&k!=='clients')body[k]=input[k];});
+    return callWorker(body);
+  });
+}
+
+async function pinterestQuery(input,sel){
+  if(!cfg.wurl)return{error:'No Worker URL — open Configuration'};
+  return fanOut('pinterest',sel,function(c){
+    var body={source:'pinterest_ads'};
+    if(cfg.pttoken)body.accessToken=cfg.pttoken;
+    if(cfg.ptrefresh)body.refreshToken=cfg.ptrefresh;
+    body.accountId=c.pinterest.acct;
+    Object.keys(input).forEach(function(k){if(k!=='description'&&k!=='clients')body[k]=input[k];});
+    return callWorker(body);
+  });
+}
+
+async function redditQuery(input,sel){
+  if(!cfg.wurl)return{error:'No Worker URL — open Configuration'};
+  return fanOut('reddit',sel,function(c){
+    var body={source:'reddit_ads'};
+    if(cfg.rdtoken)body.accessToken=cfg.rdtoken;
+    if(cfg.rdrefresh)body.refreshToken=cfg.rdrefresh;
+    body.accountId=c.reddit.acct;
     Object.keys(input).forEach(function(k){if(k!=='description'&&k!=='clients')body[k]=input[k];});
     return callWorker(body);
   });
@@ -1993,13 +2054,92 @@ EXAMPLES:
       accountId:{type:'string',description:'Override the default account ID'},
       description:{type:'string',description:'One-line description shown in UI'}
     },required:['description']}
+  },
+  {
+    name:'query_pinterest_ads',
+    description:`Call the Pinterest Ads API (v5) via Cloudflare Worker. Use for all Pinterest Ads data.
+
+ACTIONS (set the action field):
+  "analytics" — performance metrics (DEFAULT). Account-level unless level:"campaign" or campaignIds given.
+  "campaigns" — list campaigns with status/objective/budgets
+  "accounts"  — list accessible ad accounts
+
+METRIC COLUMNS (Pinterest naming — request only what you need):
+  Spend:       SPEND_IN_MICRO_DOLLAR  (micro-dollars; a plain SPEND field is auto-added, already divided by 1,000,000 — use SPEND in answers)
+  Volume:      IMPRESSION_2, CLICKTHROUGH_2 (clicks), OUTBOUND_CLICK_1
+  Efficiency:  CTR_2, ECPC_IN_MICRO_DOLLAR (plain ECPC auto-added), ECPM_IN_DOLLAR
+  Conversions: TOTAL_CONVERSIONS, TOTAL_CHECKOUT, CHECKOUT_ROAS, WEB_CHECKOUT_COST_PER_ACTION
+  Engagement:  ENGAGEMENT_2, SAVE_2 (saves/repins), PIN_PROMOTION_ID
+
+DATE RULE: NEVER infer dates from campaign names. Use startDate/endDate (defaults: last 30 days).
+granularity: "TOTAL" (one summary row, default) or "DAY" (daily rows with a DATE field).
+
+CAMPAIGN-LEVEL DATA: set level:"campaign" — the worker lists campaigns then pulls their analytics in one pass, attaching CAMPAIGN_NAME. Or pass campaignIds directly.
+
+EXAMPLES:
+  Account overview: {action:"analytics", description:"Pinterest account last 30d"}
+  Campaign breakdown: {action:"analytics", level:"campaign", description:"Pinterest campaigns last 30d"}
+  Daily trend: {action:"analytics", granularity:"DAY", startDate:"2026-08-01", endDate:"2026-08-31", description:"Pinterest daily trend August"}
+  Campaign list with status: {action:"campaigns", description:"Pinterest campaign list"}`,
+    input_schema:{type:'object',properties:{
+      clients:{type:'array',items:{type:'string'},description:'Which clients to query. Omit or use ["all"] for EVERY client that has this platform configured. Names are matched loosely.'},
+      action:{type:'string',description:'analytics | campaigns | accounts (default: analytics)'},
+      level:{type:'string',description:'"campaign" for per-campaign analytics (auto-fetches campaign list); omit for account-level'},
+      columns:{type:'array',items:{type:'string'},description:'Pinterest metric columns e.g. ["SPEND_IN_MICRO_DOLLAR","IMPRESSION_2","CLICKTHROUGH_2","TOTAL_CONVERSIONS"]'},
+      granularity:{type:'string',description:'TOTAL (default) or DAY for daily rows'},
+      startDate:{type:'string',description:'YYYY-MM-DD (defaults to 30 days ago)'},
+      endDate:{type:'string',description:'YYYY-MM-DD (defaults to today)'},
+      campaignIds:{type:'array',items:{type:'string'},description:'Restrict analytics to specific campaign IDs'},
+      statuses:{type:'array',items:{type:'string'},description:'For action=campaigns: filter by entity status e.g. ["ACTIVE"]'},
+      accountId:{type:'string',description:'Override the default ad account ID'},
+      description:{type:'string',description:'One-line description shown in UI'}
+    },required:['description']}
+  },
+  {
+    name:'query_reddit_ads',
+    description:`Call the Reddit Ads API (v3) via Cloudflare Worker. Use for all Reddit Ads data.
+
+ACTIONS (set the action field):
+  "report"    — performance report (DEFAULT). Grouped by breakdowns.
+  "campaigns" — list campaigns with status/objective/dates
+  "accounts"  — list accessible ad accounts
+
+REPORT FIELDS (lowercase — request only what you need):
+  Spend/volume: spend (returned in PLAIN currency units — the worker already divided the API's micro-units by 1,000,000), impressions, clicks
+  Efficiency:   ctr, cpc (also pre-divided), ecpm
+  Video:        video_started, video_watched_25_percent, video_watched_100_percent
+  Conversions:  conversion_purchase_total_items, conversion_signup_total_count, conversion_lead_total_count
+
+BREAKDOWNS: ["campaign_id"] (default), ["campaign_id","date"] for daily rows, ["ad_id"], ["ad_group_id"], ["country"].
+The worker joins campaign_name onto rows automatically when campaign_id is a breakdown.
+
+DATE RULE: NEVER infer dates from campaign names. Use startDate/endDate (defaults: last 30 days).
+Set granularity:"DAY" as a shortcut for adding "date" to the breakdowns.
+
+RELAUNCH DETECTION: action="campaigns" returns created_at/modified_at/configured_status — cross-check with report spend.
+
+EXAMPLES:
+  Campaign overview: {action:"report", description:"Reddit campaigns last 30d"}
+  Daily trend: {action:"report", granularity:"DAY", startDate:"2026-08-01", endDate:"2026-08-31", description:"Reddit daily trend August"}
+  Campaign list: {action:"campaigns", description:"Reddit campaign list with status"}`,
+    input_schema:{type:'object',properties:{
+      clients:{type:'array',items:{type:'string'},description:'Which clients to query. Omit or use ["all"] for EVERY client that has this platform configured. Names are matched loosely.'},
+      action:{type:'string',description:'report | campaigns | accounts (default: report)'},
+      breakdowns:{type:'array',items:{type:'string'},description:'Report grouping e.g. ["campaign_id"] or ["campaign_id","date"]'},
+      fields:{type:'array',items:{type:'string'},description:'Report metrics e.g. ["spend","impressions","clicks","ctr"]'},
+      granularity:{type:'string',description:'DAY for daily rows (adds "date" to breakdowns)'},
+      startDate:{type:'string',description:'YYYY-MM-DD (defaults to 30 days ago)'},
+      endDate:{type:'string',description:'YYYY-MM-DD (defaults to today)'},
+      accountId:{type:'string',description:'Override the default ad account ID'},
+      description:{type:'string',description:'One-line description shown in UI'}
+    },required:['description']}
   }];
 
 const DEFAULT_SYS=`You are the CMM Ads Intelligence assistant, built by Curious Minds Media.
-You are a senior performance marketing analyst with expert-level knowledge of Google Ads, Meta (Facebook/Instagram) Ads, TikTok Ads, and LinkedIn Ads.
+You are a senior performance marketing analyst with expert-level knowledge of Google Ads, Meta (Facebook/Instagram) Ads, TikTok Ads, LinkedIn Ads, Pinterest Ads, and Reddit Ads.
 
 ## PLATFORMS
-You have FIVE tools: list_clients (who the clients are and what each has connected), query_google_ads (Google Ads, GAQL via API v21), query_meta_ads (Meta), query_tiktok_ads (TikTok), and query_linkedin_ads (LinkedIn). Every platform tool queries one, several, or ALL clients at once via its "clients" parameter. Use the right tool per platform. For cross-platform questions, call all relevant tools and normalise currency, date range, and metric definitions before comparing. TikTok reports and LinkedIn analytics default to the last 30 days when you omit dates.
+You have SEVEN tools: list_clients (who the clients are and what each has connected), query_google_ads (Google Ads, GAQL via API v21), query_meta_ads (Meta), query_tiktok_ads (TikTok), query_linkedin_ads (LinkedIn), query_pinterest_ads (Pinterest), and query_reddit_ads (Reddit). Every platform tool queries one, several, or ALL clients at once via its "clients" parameter. Use the right tool per platform. For cross-platform questions, call all relevant tools and normalise currency, date range, and metric definitions before comparing. TikTok, LinkedIn, Pinterest and Reddit all default to the last 30 days when you omit dates. Pinterest spend: use the auto-added plain SPEND field (already divided from SPEND_IN_MICRO_DOLLAR). Reddit spend and cpc arrive already converted to plain currency units.
 
 ## MULTIPLE CLIENTS — READ THIS FIRST
 This workspace manages SEVERAL clients. Every platform tool takes a "clients" array.
@@ -2199,7 +2339,7 @@ async function ask(userMsg){
             const cs=loadClients();
             const card=appendToolCard('google','Clients & connected platforms',cs.length+' client'+(cs.length===1?'':'s'));
             const out=cs.map(c=>({name:c.name,
-              platforms:['google','meta','tiktok','linkedin'].filter(p=>clientHas(c,p))}));
+              platforms:['google','meta','tiktok','linkedin','pinterest','reddit'].filter(p=>clientHas(c,p))}));
             r={data:JSON.stringify({clients:out,total:out.length})};
             card.ok(out.length+' clients');
           } else if(t.name==='query_google_ads'){
@@ -2276,6 +2416,42 @@ async function ask(userMsg){
               }catch(_){rowInfo=`${(r.data.length/1024).toFixed(1)}kb`}
               card.ok(rowInfo);
             }
+          } else if(t.name==='query_pinterest_ads'){
+            const inp=t.input;
+            const detail=`${inp.action||'analytics'} · ${(inp.columns||inp.campaignIds||[]).slice(0,3).join(', ')}`;
+            status.phase('searching','Pinterest Ads');
+            const card=appendToolCard('pinterest',inp.description||'Pinterest query',detail);
+            r=await pinterestQuery(inp,inp.clients);
+            if(r.error){card.err('Failed')}
+            else{
+              let rowInfo='data received';
+              try{
+                const parsed=JSON.parse(r.data);
+                const rows=parsed.total_rows!==undefined?parsed.total_rows:(parsed.total||parsed.data?.length);
+                const cl=parsed.clients_queried?` · ${parsed.clients_queried.length} client${parsed.clients_queried.length===1?'':'s'}`:'';
+                if(rows!==undefined)rowInfo=`${rows} rows${cl}`;
+                else rowInfo=`${(r.data.length/1024).toFixed(1)}kb`;
+              }catch(_){rowInfo=`${(r.data.length/1024).toFixed(1)}kb`}
+              card.ok(rowInfo);
+            }
+          } else if(t.name==='query_reddit_ads'){
+            const inp=t.input;
+            const detail=`${inp.action||'report'} · ${(inp.breakdowns||inp.fields||[]).slice(0,3).join(', ')}`;
+            status.phase('searching','Reddit Ads');
+            const card=appendToolCard('reddit',inp.description||'Reddit query',detail);
+            r=await redditQuery(inp,inp.clients);
+            if(r.error){card.err('Failed')}
+            else{
+              let rowInfo='data received';
+              try{
+                const parsed=JSON.parse(r.data);
+                const rows=parsed.total_rows!==undefined?parsed.total_rows:(parsed.total||parsed.data?.length);
+                const cl=parsed.clients_queried?` · ${parsed.clients_queried.length} client${parsed.clients_queried.length===1?'':'s'}`:'';
+                if(rows!==undefined)rowInfo=`${rows} rows${cl}`;
+                else rowInfo=`${(r.data.length/1024).toFixed(1)}kb`;
+              }catch(_){rowInfo=`${(r.data.length/1024).toFixed(1)}kb`}
+              card.ok(rowInfo);
+            }
           }
           }catch(err){ r={error:'Tool execution error: '+(err&&err.message||err)}; }
           if(!r)r={error:`Tool "${t.name}" is not supported`};
@@ -2337,7 +2513,7 @@ async function discoverClients(){
     let c=clients.find(x=>x[plat]&&x[plat][key]===id);
     if(!c)c=clients.find(x=>(x.name||'').toLowerCase()===String(name||'').toLowerCase());
     if(!c){ c={id:'c'+Date.now()+Math.random().toString(36).slice(2,6),name:name||id,
-      google:{cid:'',mgr:''},meta:{act:''},tiktok:{adv:''},linkedin:{acct:''}};
+      google:{cid:'',mgr:''},meta:{act:''},tiktok:{adv:''},linkedin:{acct:''},pinterest:{acct:''},reddit:{acct:''}};
       clients.push(c); added++; }
     c[plat]=c[plat]||{}; c[plat][key]=id;
     /* adopt the real account name over a placeholder from migration */
@@ -2348,7 +2524,7 @@ async function discoverClients(){
     (d.accounts||[]).forEach(a=>upsert('meta','act',a.id,a.name));
   }catch(e){ problems.push('Meta: '+e.message); }
 
-  for(const [src,plat,key] of [['google_accounts','google','cid'],['tiktok_accounts','tiktok','adv'],['linkedin_accounts','linkedin','acct']]){
+  for(const [src,plat,key] of [['google_accounts','google','cid'],['tiktok_accounts','tiktok','adv'],['linkedin_accounts','linkedin','acct'],['pinterest_accounts','pinterest','acct'],['reddit_accounts','reddit','acct']]){
     try{ const d=await call({source:src});
       (d.accounts||[]).forEach(a=>upsert(plat,key,a.id,a.name));
     }catch(e){ /* older worker: unknown source — not fatal */ problems.push(plat+': '+e.message); }
@@ -2413,6 +2589,8 @@ function renderClients(){
         '<div class="cl-f"><label>Meta ad account</label><input data-i="'+i+'" data-k="meta.act" placeholder="act_123456789"></div>'+
         '<div class="cl-f"><label>TikTok advertiser ID</label><input data-i="'+i+'" data-k="tiktok.adv" placeholder="7123456789012345678"></div>'+
         '<div class="cl-f"><label>LinkedIn account ID</label><input data-i="'+i+'" data-k="linkedin.acct" placeholder="123456789"></div>'+
+        '<div class="cl-f"><label>Pinterest ad account ID</label><input data-i="'+i+'" data-k="pinterest.acct" placeholder="549812345678"></div>'+
+        '<div class="cl-f"><label>Reddit ad account ID</label><input data-i="'+i+'" data-k="reddit.acct" placeholder="t2_abc123"></div>'+
       '</div>';
     row.querySelector('.cl-name').value=c.name||'';
     row.querySelectorAll('input[data-k]').forEach(inp=>{
@@ -2434,7 +2612,7 @@ function renderClients(){
 }
 function addClient(){
   loadClients();
-  clients.push({id:'c'+Date.now(),name:'',google:{cid:'',mgr:''},meta:{act:''},tiktok:{adv:''},linkedin:{acct:''}});
+  clients.push({id:'c'+Date.now(),name:'',google:{cid:'',mgr:''},meta:{act:''},tiktok:{adv:''},linkedin:{acct:''},pinterest:{acct:''},reddit:{acct:''}});
   storeClients(); renderClients();
   const inputs=document.querySelectorAll('#cl-list .cl-name');
   if(inputs.length)inputs[inputs.length-1].focus();
@@ -2458,6 +2636,12 @@ function openSettings(){closeSidebar();
   var _lir=document.getElementById('c-lirefresh');if(_lir)_lir.value=cfg.lirefresh||'';
   var _ttt=document.getElementById('c-tttoken');if(_ttt)_ttt.value=cfg.tttoken||'';
   var _tta=document.getElementById('c-ttadv');if(_tta)_tta.value=cfg.ttadv||'';
+  var _ptt=document.getElementById('c-pttoken');if(_ptt)_ptt.value=cfg.pttoken||'';
+  var _pta=document.getElementById('c-ptacct');if(_pta)_pta.value=cfg.ptacct||'';
+  var _ptr=document.getElementById('c-ptrefresh');if(_ptr)_ptr.value=cfg.ptrefresh||'';
+  var _rdt=document.getElementById('c-rdtoken');if(_rdt)_rdt.value=cfg.rdtoken||'';
+  var _rda=document.getElementById('c-rdacct');if(_rda)_rda.value=cfg.rdacct||'';
+  var _rdr=document.getElementById('c-rdrefresh');if(_rdr)_rdr.value=cfg.rdrefresh||'';
   openMod('m-cfg');
 }
 function saveSettings(){
@@ -2478,6 +2662,13 @@ function saveSettings(){
   var _lir2=document.getElementById('c-lirefresh');if(_lir2)cfg.lirefresh=_lir2.value.trim();
   var _ttt2=document.getElementById('c-tttoken');if(_ttt2)cfg.tttoken=_ttt2.value.trim();
   var _tta2=document.getElementById('c-ttadv');if(_tta2)cfg.ttadv=_tta2.value.trim();
+  var _ptt2=document.getElementById('c-pttoken');if(_ptt2)cfg.pttoken=_ptt2.value.trim();
+  var _pta2=document.getElementById('c-ptacct');if(_pta2)cfg.ptacct=_pta2.value.trim();
+  var _ptr2=document.getElementById('c-ptrefresh');if(_ptr2)cfg.ptrefresh=_ptr2.value.trim();
+  var _rdt2=document.getElementById('c-rdtoken');if(_rdt2)cfg.rdtoken=_rdt2.value.trim();
+  var _rda2=document.getElementById('c-rdacct');if(_rda2)cfg.rdacct=_rda2.value.trim();
+  var _rdr2=document.getElementById('c-rdrefresh');if(_rdr2)cfg.rdrefresh=_rdr2.value.trim();
+  storeCfg();
 }
 function openSetup(){closeSidebar();openMod('m-setup')}
 function openMod(id){document.getElementById(id).classList.add('open')}

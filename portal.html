@@ -28,7 +28,7 @@
   --shadow:0 30px 90px rgba(60,44,30,.28),0 2px 8px rgba(60,44,30,.10);
   --fm:'DM Sans',system-ui,-apple-system,sans-serif;--fmono:'DM Mono',ui-monospace,monospace;
   /* platform series */
-  --s-google:#22d3ee;--s-meta:#a78bfa;--s-tiktok:#f472b6;--s-linkedin:#fbbf24;
+  --s-google:#22d3ee;--s-meta:#a78bfa;--s-tiktok:#f472b6;--s-linkedin:#fbbf24;--s-pinterest:#ef4444;--s-reddit:#f97316;
   --st-good:#12a150;--st-warn:#d98700;--st-serious:#e2703a;--st-critical:#d64545;
 }
 /* ── WARM DARK ── */
@@ -562,6 +562,8 @@ const PLATFORMS = {
   meta:     { label:'Meta Ads',     color:'var(--s-meta)',     hex:'#7c3aed' },
   tiktok:   { label:'TikTok Ads',   color:'var(--s-tiktok)',   hex:'#db2777' },
   linkedin: { label:'LinkedIn Ads', color:'var(--s-linkedin)', hex:'#b45309' },
+  pinterest:{ label:'Pinterest Ads',color:'var(--s-pinterest)',hex:'#b91c1c' },
+  reddit:   { label:'Reddit Ads',   color:'var(--s-reddit)',   hex:'#c2410c' },
 };
 const DEFAULT_WURL='https://ads-proxy.heshan-998.workers.dev/';
 let cfg={}, user=null;
@@ -570,7 +572,7 @@ let state={ range:'30', platform:'all', client:'all', q:'', platStatus:{}, demo:
 function loadCfg(){
   try{ user=JSON.parse(localStorage.getItem('cmm_user')||'null'); }catch(e){ user=null; }
   const uid=user?user.id:'guest';
-  ['wurl','wsec','gcid','gmgr','fbid','tttoken','ttadv','litoken','liacct','lirefresh'].forEach(k=>{
+  ['wurl','wsec','gcid','gmgr','fbid','tttoken','ttadv','litoken','liacct','lirefresh','pttoken','ptacct','ptrefresh','rdtoken','rdacct','rdrefresh'].forEach(k=>{
     cfg[k]=localStorage.getItem('cmm_'+uid+'_'+k)||'';
   });
   if(!cfg.wurl)cfg.wurl=DEFAULT_WURL;
@@ -634,9 +636,10 @@ function loadClients(){
   const uid=user?user.id:'guest';
   try{ clients=JSON.parse(localStorage.getItem('cmm_'+uid+'_clients')||'[]'); }catch(e){ clients=[]; }
   if(!Array.isArray(clients))clients=[];
-  if(!clients.length&&(cfg.gcid||cfg.fbid||cfg.ttadv||cfg.liacct)){
+  if(!clients.length&&(cfg.gcid||cfg.fbid||cfg.ttadv||cfg.liacct||cfg.ptacct||cfg.rdacct)){
     clients=[{id:'c0',name:'Default client',google:{cid:cfg.gcid,mgr:cfg.gmgr},
-      meta:{act:cfg.fbid},tiktok:{adv:cfg.ttadv},linkedin:{acct:cfg.liacct}}];
+      meta:{act:cfg.fbid},tiktok:{adv:cfg.ttadv},linkedin:{acct:cfg.liacct},
+      pinterest:{acct:cfg.ptacct},reddit:{acct:cfg.rdacct}}];
   }
   return clients;
 }
@@ -645,6 +648,8 @@ function clientHas(c,p){
   if(p==='meta')return !!(c.meta&&c.meta.act);
   if(p==='tiktok')return !!(c.tiktok&&c.tiktok.adv);
   if(p==='linkedin')return !!(c.linkedin&&c.linkedin.acct);
+  if(p==='pinterest')return !!(c.pinterest&&c.pinterest.acct);
+  if(p==='reddit')return !!(c.reddit&&c.reddit.acct);
   return false;
 }
 function activeClients(p){
@@ -737,12 +742,50 @@ async function fetchLinkedIn(rg,cl){
   return {rows,daily};
 }
 
+async function fetchPinterest(rg,cl){
+  const base={source:'pinterest_ads',...(cfg.pttoken?{accessToken:cfg.pttoken}:{}),...(cfg.ptrefresh?{refreshToken:cfg.ptrefresh}:{}),accountId:cl.pinterest.acct};
+  const camps=await wcall({...base,action:'campaigns'});
+  const ana=await wcall({...base,action:'analytics',level:'campaign',startDate:dayStr(rg.start),endDate:dayStr(rg.end)});
+  const day=await wcall({...base,action:'analytics',granularity:'DAY',startDate:dayStr(rg.start),endDate:dayStr(rg.end)});
+  /* spend caps arrive in micro-currency */
+  const meta={}; (camps.data||[]).forEach(c=>{ meta[String(c.id)]={name:c.name,status:c.status,
+    daily:c.daily_spend_cap?Number(c.daily_spend_cap)/1e6:null, life:c.lifetime_spend_cap?Number(c.lifetime_spend_cap)/1e6:null}; });
+  const rows=(ana.data||[]).map(r=>{
+    const id=String(r.CAMPAIGN_ID||''); const mm=meta[id]||{};
+    return { client:cl.name, platform:'pinterest', id, name:r.CAMPAIGN_NAME||mm.name||('Campaign '+id), status:mm.status||r.CAMPAIGN_STATUS||'UNKNOWN',
+      dailyBudget:mm.daily, lifetimeBudget:mm.life, spend:Number(r.SPEND||0),  /* SPEND is pre-divided by the worker */
+      impressions:Number(r.IMPRESSION_2||0), clicks:Number(r.CLICKTHROUGH_2||0),
+      conversions:r.TOTAL_CONVERSIONS!=null?Number(r.TOTAL_CONVERSIONS):null, currency:'USD' };
+  });
+  const daily={}; (day.data||[]).forEach(r=>{ const d=r.DATE; if(d)daily[d]=(daily[d]||0)+Number(r.SPEND||0); });
+  return {rows,daily};
+}
+
+async function fetchReddit(rg,cl){
+  const base={source:'reddit_ads',...(cfg.rdtoken?{accessToken:cfg.rdtoken}:{}),...(cfg.rdrefresh?{refreshToken:cfg.rdrefresh}:{}),accountId:cl.reddit.acct};
+  const camps=await wcall({...base,action:'campaigns'});
+  const rep=await wcall({...base,action:'report',breakdowns:['campaign_id'],fields:['spend','impressions','clicks'],startDate:dayStr(rg.start),endDate:dayStr(rg.end)});
+  const day=await wcall({...base,action:'report',breakdowns:['date'],fields:['spend'],startDate:dayStr(rg.start),endDate:dayStr(rg.end)});
+  /* spend caps arrive in micro-currency; report spend is pre-divided by the worker */
+  const meta={}; (camps.data||[]).forEach(c=>{ meta[String(c.id)]={name:c.name,status:c.configured_status||c.effective_status,
+    daily:c.spend_cap?Number(c.spend_cap)/1e6:null, life:c.total_spend_cap?Number(c.total_spend_cap)/1e6:null}; });
+  const rows=(rep.data||[]).map(r=>{
+    const id=String(r.campaign_id||''); const mm=meta[id]||{};
+    return { client:cl.name, platform:'reddit', id, name:r.campaign_name||mm.name||('Campaign '+id), status:mm.status||'UNKNOWN',
+      dailyBudget:mm.daily, lifetimeBudget:mm.life, spend:Number(r.spend||0),
+      impressions:Number(r.impressions||0), clicks:Number(r.clicks||0), conversions:null, currency:'USD' };
+  });
+  const daily={}; (day.data||[]).forEach(r=>{ const d=r.date?String(r.date).slice(0,10):null; if(d)daily[d]=(daily[d]||0)+Number(r.spend||0); });
+  return {rows,daily};
+}
+
 /* ═════════════════════ demo data ═════════════════════ */
 function demoData(rg){
   let seed=42; const rand=()=>{ seed=(seed*1103515245+12345)%2147483648; return seed/2147483648; };
   const names={ google:['Brand Search AU','Generic — Non-brand','Performance Max — Retail','Remarketing RLSA'],
     meta:['AEP Awareness AU','Retargeting — Warm','Lead Gen — Lookalike 1%','Advantage+ Shopping'],
-    tiktok:['Spark Ads — UGC Push','Traffic — Broad AU'], linkedin:['AEP Thought Leadership','ABM — Enterprise Tier 1'] };
+    tiktok:['Spark Ads — UGC Push','Traffic — Broad AU'], linkedin:['AEP Thought Leadership','ABM — Enterprise Tier 1'],
+    pinterest:['Seasonal Lookbook Pins','Shopping Catalog — Home'], reddit:['Community Push — r/australia','Conversation Placement — Promo'] };
   const rows=[],dailyByPlat={};
   Object.keys(names).forEach((p,pi)=>{
     dailyByPlat[p]={};
@@ -757,7 +800,7 @@ function demoData(rg){
         spend+=ds; dailyByPlat[p][dt]=(dailyByPlat[p][dt]||0)+ds;
         imp+=ds*(90+rand()*160); clk+=ds*(1.4+rand()*2.2);
       }
-      const conv=p==='tiktok'?null:Math.round(clk*(0.02+rand()*0.06));
+      const conv=(p==='tiktok'||p==='reddit')?null:Math.round(clk*(0.02+rand()*0.06));
       rows.push({ client:['Acme Corp','Northwind','Contoso'][i%3], platform:p,id:'demo_'+p+'_'+i,name:n,status:i===3?'PAUSED':'ACTIVE',
         dailyBudget:budget,lifetimeBudget:null,spend,impressions:Math.round(imp),clicks:Math.round(clk),
         conversions:conv,currency:'USD' });
@@ -778,7 +821,7 @@ async function loadData(){
     const d=demoData(rg);
     state.rows=d.rows; state.daily=d.dailyByPlat;
   }else{
-    const jobs={ google:fetchGoogle, meta:fetchMeta, tiktok:fetchTikTok, linkedin:fetchLinkedIn };
+    const jobs={ google:fetchGoogle, meta:fetchMeta, tiktok:fetchTikTok, linkedin:fetchLinkedIn, pinterest:fetchPinterest, reddit:fetchReddit };
     const rows=[],daily={};
     const tasks=[];
     state.platStatus={};
