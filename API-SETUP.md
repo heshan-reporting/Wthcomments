@@ -38,7 +38,7 @@ an **encrypted secret**, not a plaintext variable.
 | **Worker auth** | `AUTH_SECRET` | — | you invent it |
 | **Meta** | `META_ACCESS_TOKEN` | `META_AD_ACCOUNT_ID` | [business.facebook.com](https://business.facebook.com/settings/system-users) |
 | **Google Ads** | `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`, `GOOGLE_ADS_REFRESH_TOKEN` | `GOOGLE_ADS_LOGIN_CUSTOMER_ID` (MCC), `GOOGLE_ADS_CUSTOMER_ID` | [API Center](https://ads.google.com/aw/apicenter) |
-| **TikTok** | `TIKTOK_ACCESS_TOKEN` | `TIKTOK_APP_ID`, `TIKTOK_APP_SECRET` (account discovery), `TIKTOK_ADVERTISER_ID` | [business-api.tiktok.com/portal](https://business-api.tiktok.com/portal) |
+| **TikTok** | `TIKTOK_ACCESS_TOKEN` | `TIKTOK_APP_ID`, `TIKTOK_APP_SECRET` (account discovery), `TIKTOK_ADVERTISER_ID` | [ads.tiktok.com/marketing_api/apps](https://ads.tiktok.com/marketing_api/apps/) |
 | **LinkedIn** | `LINKEDIN_ACCESS_TOKEN` **or** the trio | `LINKEDIN_REFRESH_TOKEN` + `LINKEDIN_CLIENT_ID` + `LINKEDIN_CLIENT_SECRET`, `LINKEDIN_AD_ACCOUNT_ID`, `LINKEDIN_VERSION` | [linkedin.com/developers/apps](https://www.linkedin.com/developers/apps) |
 | **Pinterest** | `PINTEREST_ACCESS_TOKEN` **or** the trio | `PINTEREST_REFRESH_TOKEN` + `PINTEREST_CLIENT_ID` + `PINTEREST_CLIENT_SECRET`, `PINTEREST_AD_ACCOUNT_ID` | [developers.pinterest.com/apps](https://developers.pinterest.com/apps/) |
 | **Reddit** | `REDDIT_REFRESH_TOKEN` + `REDDIT_CLIENT_ID` + `REDDIT_CLIENT_SECRET` | `REDDIT_ACCESS_TOKEN` (tests only), `REDDIT_AD_ACCOUNT_ID` | [reddit.com/prefs/apps](https://www.reddit.com/prefs/apps) |
@@ -241,32 +241,72 @@ advertiser discovery.
 
 ### 1. Developer app
 
-[business-api.tiktok.com/portal](https://business-api.tiktok.com/portal) → **My
-Apps** → **Create an App**.
+[ads.tiktok.com/marketing_api/apps](https://ads.tiktok.com/marketing_api/apps/)
+→ **Create an App** (or open an existing one).
 
 - Type: **Marketing API**
 - Permissions: **Ad Account Management (Read)** and **Reporting (Read)**
   (add the write scopes only if you want mutations)
-- Redirect URL: any HTTPS URL you control — you only need to read the `auth_code`
-  off the querystring
+- **Advertiser redirect URL**: any HTTPS URL you control. Nothing has to run
+  there — TikTok only appends a code to it and you read that code out of your
+  browser's address bar. `https://example.com/callback` is fine.
 
-Copy the **App ID** and **Secret**.
+From **Basic Information**, copy the **App ID** and the **Secret**.
 
 ### 2. Authorise and get the token
 
-1. From the app page, open the generated **authorisation URL** and approve with
-   the account that owns the ad accounts.
-2. You land on your redirect URL with `?auth_code=…` — copy that code.
-3. Exchange it (the code is single-use and short-lived):
+The token isn't handed to you on a page — you authorise an ad account, TikTok
+redirects back with a one-time code, and you trade that code for the token.
+
+**a. Open the authorisation URL.** The app's page shows a generated one; copy it.
+If you'd rather build it yourself, the shape is:
+
+```
+https://business-api.tiktok.com/portal/auth?app_id=YOUR_APP_ID&state=xyz&redirect_uri=YOUR_URL_ENCODED_REDIRECT
+```
+
+`redirect_uri` must be URL-encoded and match the redirect URL on the app exactly
+— trailing slash included. `state` is any string you choose; it comes back
+unchanged.
+
+**b. Approve.** Sign in as the person who owns (or is admin on) the ad accounts
+and tick the advertisers you want this app to read.
+
+**c. Read the code off the address bar.** You land back on your redirect URL:
+
+```
+https://example.com/callback?auth_code=abc123def456&state=xyz
+```
+
+A browser error page there is fine — nothing needs to be listening. Copy the
+`auth_code` value: everything between `auth_code=` and the next `&`.
+
+**d. Exchange it, straight away.** The code is single-use and expires in minutes:
 
 ```bash
 curl -X POST 'https://business-api.tiktok.com/open_api/v1.3/oauth2/access_token/' \
   -H 'Content-Type: application/json' \
-  -d '{"app_id":"APP_ID","secret":"APP_SECRET","auth_code":"AUTH_CODE","grant_type":"authorization_code"}'
+  -d '{"app_id":"YOUR_APP_ID","secret":"YOUR_APP_SECRET","auth_code":"THE_CODE"}'
 ```
 
-The `access_token` in the response **does not expire** unless revoked. The
-response also lists the `advertiser_ids` you just authorised.
+Exactly three fields — TikTok's Marketing API takes no `grant_type` here (that
+belongs to the separate TikTok *Developer* API for consumer apps).
+
+A success looks like:
+
+```json
+{"code":0,"message":"OK","data":{
+  "access_token":"1a2b3c…",
+  "advertiser_ids":["7123456789012345678"],
+  "scope":[...]}}
+```
+
+`"code":0` means success — anything else is an error, and `message` says what.
+The `access_token` **does not expire** unless revoked. `advertiser_ids` lists
+the advertisers you just authorised.
+
+If you get `auth_code is invalid`, the code was already used or has expired —
+redo (a) through (d); they're cheap to repeat.
 
 Shortcut for a single account: **TikTok Ads Manager → Tools → API** also issues a
 long-lived token, but it can't do advertiser discovery.
