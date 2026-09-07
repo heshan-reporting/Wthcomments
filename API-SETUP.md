@@ -50,7 +50,7 @@ Nothing is mandatory except the worker itself — every platform is
 feature-gated. Configure Meta only, and the app runs with Meta only.
 
 API versions currently pinned in `worker.js`: Meta Graph `v21.0`, Google Ads
-`v21`, TikTok `v1.3`, LinkedIn `202506`, Pinterest `v5`, Reddit `v3`.
+`v25`, TikTok `v1.3`, LinkedIn `202506`, Pinterest `v5`, Reddit `v3`.
 
 ---
 
@@ -227,6 +227,15 @@ Both are the 10-digit ID **without dashes** (`3219604662`, not `321-960-4662`).
 | `GOOGLE_ADS_REFRESH_TOKEN` | from the Playground |
 | `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | MCC ID, no dashes — **set this if you use an MCC** |
 | `GOOGLE_ADS_CUSTOMER_ID` | *(optional)* default account |
+| `GOOGLE_ADS_API_VERSION` | *(optional)* e.g. `v25` — overrides the pinned version |
+
+> **Google retires each API version about a year after release**, and calls to a
+> retired one come back as an HTML 404 page rather than an API error, so it
+> reads like a broken endpoint rather than an expired version. When that
+> happens, set `GOOGLE_ADS_API_VERSION` to a current version — a variable
+> change, no redeploy of `worker.js`. Check the current versions on Google's
+> [sunset dates](https://developers.google.com/google-ads/api/docs/sunset-dates)
+> page.
 
 > `GOOGLE_ADS_LOGIN_CUSTOMER_ID` missing is the single most common Google
 > failure — client accounts under an MCC return `USER_PERMISSION_DENIED` / 401
@@ -632,6 +641,7 @@ redeploy `worker.js` before debugging anything else.
 | Google `DEVELOPER_TOKEN_NOT_APPROVED` | Token still has test-account access — apply for Basic in API Center |
 | Google `USER_PERMISSION_DENIED` / 401 | Set `GOOGLE_ADS_LOGIN_CUSTOMER_ID` to your MCC ID (no dashes), and confirm the MCC links the client account |
 | Google `CUSTOMER_NOT_FOUND` | Use the 10-digit ID without dashes |
+| Google 404, HTML error page, both accounts fail identically | The pinned API version is retired — set `GOOGLE_ADS_API_VERSION` to a current version |
 | Google `invalid_grant` | Refresh token revoked — usually the consent screen is still in *Testing* (7-day expiry). Publish it, mint a new token |
 | Meta "token expired/invalid" | You used a user token — generate a **system user** token instead |
 | Meta token valid, no accounts | System user has no ad account assets, or is missing `ads_read` |

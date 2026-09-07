@@ -20,6 +20,8 @@
  *   GOOGLE_ADS_CLIENT_ID
  *   GOOGLE_ADS_CLIENT_SECRET
  *   GOOGLE_ADS_REFRESH_TOKEN
+ *   (optional) GOOGLE_ADS_API_VERSION – e.g. 'v25'; overrides the pinned default
+ *              when Google retires a version (a retired version 404s with HTML)
  *   (optional) TIKTOK_ACCESS_TOKEN, TIKTOK_ADVERTISER_ID
  *   (optional) LINKEDIN_ACCESS_TOKEN, LINKEDIN_AD_ACCOUNT_ID, LINKEDIN_VERSION
  *   (optional) PINTEREST_ACCESS_TOKEN, PINTEREST_AD_ACCOUNT_ID,
@@ -33,7 +35,7 @@
  * ------------------------------------------------------------------
  */
 
-const WORKER_VERSION = '3.1.0';   // bump when sources/behaviour change; the app's Connection Doctor compares it
+const WORKER_VERSION = '3.2.0';   // bump when sources/behaviour change; the app's Connection Doctor compares it
 
 /* Optional infrastructure (all feature-gated — the worker runs fine without):
    ADS_KV (KV namespace binding)  – enables the query cache, daily spend
@@ -61,7 +63,12 @@ async function cacheKey(body) {
   return 'q:' + [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 const META_V = 'v21.0';
-const GOOGLE_V = 'v21';
+// Google retires each Google Ads API version about a year after release, and a
+// retired version answers with an HTML 404 rather than an API error. Override
+// this with the GOOGLE_ADS_API_VERSION variable to move versions without a
+// code change.
+const GOOGLE_V = 'v25';
+const googleV = (env) => (env && env.GOOGLE_ADS_API_VERSION) || GOOGLE_V;
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -228,10 +235,10 @@ async function health(body, env) {
       if (!env.GOOGLE_ADS_DEVELOPER_TOKEN) return { skip: 'GOOGLE_ADS_DEVELOPER_TOKEN secret is not set' };
       const tok = await googleAccessToken(env);
       if (tok.error) return { ok: false, error: tok.error, fix: /invalid_grant/i.test(tok.error) ? 'The refresh token was revoked — mint a new one with the OAuth flow in the Setup guide and update GOOGLE_ADS_REFRESH_TOKEN' : 'Check GOOGLE_ADS_CLIENT_ID / CLIENT_SECRET / REFRESH_TOKEN' };
-      const r = await fetch(`https://googleads.googleapis.com/${GOOGLE_V}/customers:listAccessibleCustomers`,
+      const r = await fetch(`https://googleads.googleapis.com/${googleV(env)}/customers:listAccessibleCustomers`,
         { headers: { Authorization: 'Bearer ' + tok.token, 'developer-token': env.GOOGLE_ADS_DEVELOPER_TOKEN } });
       const t = await r.text();
-      if (!r.ok) return { ok: false, error: googleErr(r.status, t), fix: googleFix(t) };
+      if (!r.ok) return { ok: false, error: googleErr(r.status, t, googleV(env)), fix: googleFix(t, r.status, googleV(env)) };
       let n = 0; try { n = (JSON.parse(t).resourceNames || []).length; } catch (_) {}
       const mccNote = env.GOOGLE_ADS_LOGIN_CUSTOMER_ID ? '' : ' · no GOOGLE_ADS_LOGIN_CUSTOMER_ID set — client accounts under an MCC will 403 without it';
       return { ok: true, detail: n + ' accessible customer(s)' + mccNote };
@@ -507,27 +514,27 @@ async function googleMutate(body, env, amount) {
   if (body.action === 'pause' || body.action === 'enable') {
     const op = { update: { resourceName: `customers/${cid}/campaigns/${body.campaignId}`,
       status: body.action === 'pause' ? 'PAUSED' : 'ENABLED' }, updateMask: 'status' };
-    const r = await fetch(`https://googleads.googleapis.com/${GOOGLE_V}/customers/${cid}/campaigns:mutate`,
+    const r = await fetch(`https://googleads.googleapis.com/${googleV(env)}/customers/${cid}/campaigns:mutate`,
       { method: 'POST', headers, body: JSON.stringify({ operations: [op] }) });
     const t = await r.text();
-    if (!r.ok) return { error: googleErr(r.status, t) };
+    if (!r.ok) return { error: googleErr(r.status, t, googleV(env)) };
     return { platform: 'google', action: body.action, campaignId: String(body.campaignId), applied: true };
   }
   if (body.action === 'budget') {
     // Budgets live on their own resource — find the campaign's, then mutate it.
-    const rr = await fetch(`https://googleads.googleapis.com/${GOOGLE_V}/customers/${cid}/googleAds:searchStream`,
+    const rr = await fetch(`https://googleads.googleapis.com/${googleV(env)}/customers/${cid}/googleAds:searchStream`,
       { method: 'POST', headers, body: JSON.stringify({ query: `SELECT campaign.campaign_budget FROM campaign WHERE campaign.id = ${Number(body.campaignId)}` }) });
     const tt = await rr.text();
-    if (!rr.ok) return { error: googleErr(rr.status, tt) };
+    if (!rr.ok) return { error: googleErr(rr.status, tt, googleV(env)) };
     let bres = null;
     try { const b = JSON.parse(tt);
       (Array.isArray(b) ? b : [b]).forEach((x) => (x.results || []).forEach((y) => { bres = y.campaign && y.campaign.campaignBudget; })); } catch (_) {}
     if (!bres) return { error: 'Could not find the budget resource for campaign ' + body.campaignId };
     const op = { update: { resourceName: bres, amountMicros: String(Math.round(amount * 1e6)) }, updateMask: 'amount_micros' };
-    const r = await fetch(`https://googleads.googleapis.com/${GOOGLE_V}/customers/${cid}/campaignBudgets:mutate`,
+    const r = await fetch(`https://googleads.googleapis.com/${googleV(env)}/customers/${cid}/campaignBudgets:mutate`,
       { method: 'POST', headers, body: JSON.stringify({ operations: [op] }) });
     const t = await r.text();
-    if (!r.ok) return { error: googleErr(r.status, t) };
+    if (!r.ok) return { error: googleErr(r.status, t, googleV(env)) };
     return { platform: 'google', action: 'budget', campaignId: String(body.campaignId), amount, applied: true,
       note: 'If this budget is shared, every campaign using it changes too' };
   }
@@ -626,7 +633,12 @@ async function auditLog(body, env) {
 }
 
 /* Google Ads errors arrive as deep JSON — surface the real message + code. */
-function googleErr(status, text) {
+function googleSunset(status, text) {
+  return status === 404 && /<html|<!doctype/i.test(String(text || ''));
+}
+function googleErr(status, text, ver) {
+  if (googleSunset(status, text))
+    return 'Google 404: API version ' + (ver || GOOGLE_V) + ' does not exist — Google returned an HTML error page, not an API response';
   try {
     const j = JSON.parse(text);
     const e = Array.isArray(j) ? j[0].error : j.error;
@@ -635,7 +647,9 @@ function googleErr(status, text) {
     return 'Google ' + status + (code ? ' [' + code + ']' : '') + ': ' + ((det && det.message) || (e && e.message) || text.slice(0, 200));
   } catch (_) { return 'Google ' + status + ': ' + text.slice(0, 300); }
 }
-function googleFix(text) {
+function googleFix(text, status, ver) {
+  if (googleSunset(status, text))
+    return 'That version is retired (Google sunsets each one ~1 year after release). Set the GOOGLE_ADS_API_VERSION worker variable to a current version — no redeploy of worker.js needed. The worker defaults to ' + GOOGLE_V + '.';
   if (/DEVELOPER_TOKEN_NOT_APPROVED/.test(text)) return 'Your developer token only works on test accounts — apply for Basic access in Google Ads → API Center';
   if (/USER_PERMISSION_DENIED/.test(text)) return 'The OAuth user cannot see this account — set GOOGLE_ADS_LOGIN_CUSTOMER_ID to your MCC id (no dashes) and make sure the MCC links to this client account';
   if (/CUSTOMER_NOT_FOUND|INVALID_CUSTOMER_ID/.test(text)) return 'The customer id is wrong — use the 10-digit id without dashes';
@@ -710,7 +724,7 @@ async function googleAccounts(env) {
     headers['login-customer-id'] = mgr;
     const q = `SELECT customer_client.id, customer_client.descriptive_name, customer_client.manager, customer_client.status, customer_client.currency_code
                FROM customer_client WHERE customer_client.status = 'ENABLED'`;
-    const res = await fetch(`https://googleads.googleapis.com/${GOOGLE_V}/customers/${mgr}/googleAds:searchStream`,
+    const res = await fetch(`https://googleads.googleapis.com/${googleV(env)}/customers/${mgr}/googleAds:searchStream`,
       { method: 'POST', headers, body: JSON.stringify({ query: q }) });
     const text = await res.text();
     if (res.ok) {
@@ -725,7 +739,7 @@ async function googleAccounts(env) {
     }
   }
   // No manager configured — fall back to the directly accessible customers.
-  const r = await fetch(`https://googleads.googleapis.com/${GOOGLE_V}/customers:listAccessibleCustomers`, { headers });
+  const r = await fetch(`https://googleads.googleapis.com/${googleV(env)}/customers:listAccessibleCustomers`, { headers });
   const t = await r.text();
   if (!r.ok) return json({ error: 'Google ' + r.status + ': ' + t.slice(0, 300) });
   let d; try { d = JSON.parse(t); } catch (_) { return json({ error: 'Bad Google response' }); }
@@ -860,12 +874,12 @@ async function googleAds(body, env) {
   const mgr = String(managerId || env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || '').replace(/-/g, '');
   if (mgr && mgr !== cid) headers['login-customer-id'] = mgr;
 
-  const url = `https://googleads.googleapis.com/${GOOGLE_V}/customers/${cid}/googleAds:searchStream`;
+  const url = `https://googleads.googleapis.com/${googleV(env)}/customers/${cid}/googleAds:searchStream`;
   const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ query: gaql }) });
   const text = await res.text();
   if (!res.ok) {
-    const fix = googleFix(text);
-    return json({ error: googleErr(res.status, text) + (fix ? ' — FIX: ' + fix : '') });
+    const fix = googleFix(text, res.status, googleV(env));
+    return json({ error: googleErr(res.status, text, googleV(env)) + (fix ? ' — FIX: ' + fix : '') });
   }
 
   // searchStream returns an array of { results: [...] } batches — flatten them.
