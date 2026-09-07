@@ -1398,9 +1398,11 @@ textarea:focus,input:focus{outline:none}
         <h3>What you need</h3>
         <pre><code>① Google Client ID   — for user sign-in (see Google Sign-In tab)
 ② AI API Key         — your AI API key
-③ Cloudflare Worker  — proxy for Google Ads + Meta APIs (see Worker tab)
+③ Cloudflare Worker  — proxy for every ad platform (see Worker tab)
 ④ Google Ads creds   — developer token + OAuth (see Google Ads tab)
-⑤ Meta access token  — system user token (see Meta Ads tab)</code></pre>
+⑤ Meta access token  — system user token (see Meta Ads tab)
+⑥ Optional platforms — TikTok, LinkedIn, Pinterest, Reddit, WhatsApp</code></pre>
+        <div class="callout blue">Only the worker is mandatory — every platform is feature-gated, so Meta alone is a valid setup. Step-by-step for all of them, with console links: <a href="https://github.com/heshan-reporting/Wthcomments/blob/main/API-SETUP.md" target="_blank"><strong>API-SETUP.md</strong></a>.</div>
         <h3>Multi-user model</h3>
         <p>Each person who signs in with Google gets their own private config (API keys, Worker URL, Customer ID, Meta account) and conversation history — stored in their browser's localStorage. No shared backend needed.</p>
       </div>
@@ -1419,14 +1421,29 @@ textarea:focus,input:focus{outline:none}
         <div class="callout blue">The Client ID is public — it's safe to have in the HTML. Your actual AI and API credentials are never exposed.</div>
       </div>
       <div class="tpane" id="t-wk">
-        <p>Go to <a href="https://dash.cloudflare.com" target="_blank">dash.cloudflare.com</a> &rarr; Workers &amp; Pages &rarr; Create Worker &rarr; paste <strong>worker.js</strong> &rarr; Deploy. Then add the 7 secrets in Worker Settings &rarr; Variables.</p>
-        <pre><code>GOOGLE_ADS_DEVELOPER_TOKEN
+        <p>Go to <a href="https://dash.cloudflare.com" target="_blank">dash.cloudflare.com</a> &rarr; Workers &amp; Pages &rarr; Create Worker &rarr; paste <strong>worker.js</strong> &rarr; Deploy. Then add secrets in Worker Settings &rarr; <strong>Variables and Secrets</strong> (encrypted).</p>
+        <h3>Core</h3>
+        <pre><code>AUTH_SECRET                  &larr; must match "Worker Auth Token" in Config
+ANTHROPIC_API_KEY
+META_ACCESS_TOKEN
+META_AD_ACCOUNT_ID           (optional &mdash; accounts are auto-discovered)
+GOOGLE_ADS_DEVELOPER_TOKEN
 GOOGLE_ADS_CLIENT_ID
 GOOGLE_ADS_CLIENT_SECRET
 GOOGLE_ADS_REFRESH_TOKEN
-META_ACCESS_TOKEN
-META_AD_ACCOUNT_ID
-AUTH_SECRET</code></pre>
+GOOGLE_ADS_LOGIN_CUSTOMER_ID (your MCC id &mdash; fixes most Google 401s)</code></pre>
+        <h3>Extra platforms (each optional)</h3>
+        <pre><code>TIKTOK_ACCESS_TOKEN, TIKTOK_APP_ID, TIKTOK_APP_SECRET
+LINKEDIN_ACCESS_TOKEN or LINKEDIN_REFRESH_TOKEN + LINKEDIN_CLIENT_ID/SECRET
+PINTEREST_ACCESS_TOKEN or PINTEREST_REFRESH_TOKEN + PINTEREST_CLIENT_ID/SECRET
+REDDIT_REFRESH_TOKEN + REDDIT_CLIENT_ID/SECRET   (tokens expire daily)</code></pre>
+        <h3>Optional infrastructure</h3>
+        <pre><code>ADS_KV               KV namespace binding &mdash; cache, history, audit log
+CACHE_TTL            cache seconds (default 900)
+ALLOW_MUTATIONS      "true" to allow pause / budget changes
+MUTATION_MAX_BUDGET  cap on any budget set via the app
+CLIENTS_JSON         pin accounts to clients + monthly budgets</code></pre>
+        <div class="callout blue">Full walkthrough for every platform &mdash; consoles, scopes, token exchange and fixes &mdash; is in <a href="https://github.com/heshan-reporting/Wthcomments/blob/main/API-SETUP.md" target="_blank"><strong>API-SETUP.md</strong></a>. Check your work with <strong>Configuration &rarr; Connection Doctor</strong>.</div>
       </div>
       <div class="tpane" id="t-gc">
         <h3>Developer Token</h3>
@@ -1831,7 +1848,7 @@ const TOOLS=[
   },
   {
     name:'query_google_ads',
-    description:`Execute a GAQL query against Google Ads (API v21, searchStream) via Cloudflare Worker. Use for any Google Ads data. ALWAYS call before answering — never guess.
+    description:`Execute a GAQL query against Google Ads (searchStream) via Cloudflare Worker. Use for any Google Ads data. ALWAYS call before answering — never guess.
 
 ## DATA EFFICIENCY
 Request only the fields you need. Start at campaign level; drill to ad_group / ad / keyword level only for the top performers or when specifically asked.
@@ -1860,7 +1877,7 @@ YouTube/Video campaigns have NO keywords. keyword_view returns nothing for them.
   geographic_view, search_term_view, campaign_criterion, age_range_view, gender_view
 
 ## CONVERSIONS
-cost_micros / 1,000,000 = currency units. v21 removed metrics.conversion_rate —
+cost_micros / 1,000,000 = currency units. Current API versions have removed metrics.conversion_rate —
 compute it yourself: metrics.conversions / metrics.clicks.
 
 ## EXAMPLES
@@ -2227,7 +2244,7 @@ const DEFAULT_SYS=`You are the CMM Ads Intelligence assistant, built by Curious 
 You are a senior performance marketing analyst with expert-level knowledge of Google Ads, Meta (Facebook/Instagram) Ads, TikTok Ads, LinkedIn Ads, Pinterest Ads, and Reddit Ads.
 
 ## PLATFORMS
-You have SEVEN tools: list_clients (who the clients are and what each has connected), query_google_ads (Google Ads, GAQL via API v21), query_meta_ads (Meta), query_tiktok_ads (TikTok), query_linkedin_ads (LinkedIn), query_pinterest_ads (Pinterest), and query_reddit_ads (Reddit). Every platform tool queries one, several, or ALL clients at once via its "clients" parameter. Use the right tool per platform. For cross-platform questions, call all relevant tools and normalise currency, date range, and metric definitions before comparing. TikTok, LinkedIn, Pinterest and Reddit all default to the last 30 days when you omit dates. Pinterest spend: use the auto-added plain SPEND field (already divided from SPEND_IN_MICRO_DOLLAR). Reddit spend and cpc arrive already converted to plain currency units.
+You have SEVEN tools: list_clients (who the clients are and what each has connected), query_google_ads (Google Ads, GAQL), query_meta_ads (Meta), query_tiktok_ads (TikTok), query_linkedin_ads (LinkedIn), query_pinterest_ads (Pinterest), and query_reddit_ads (Reddit). Every platform tool queries one, several, or ALL clients at once via its "clients" parameter. Use the right tool per platform. For cross-platform questions, call all relevant tools and normalise currency, date range, and metric definitions before comparing. TikTok, LinkedIn, Pinterest and Reddit all default to the last 30 days when you omit dates. Pinterest spend: use the auto-added plain SPEND field (already divided from SPEND_IN_MICRO_DOLLAR). Reddit spend and cpc arrive already converted to plain currency units.
 
 ## LIVE CAMPAIGN CHANGES (manage_campaign)
 You can pause/enable campaigns and set daily budgets, but ONLY through manage_campaign, which shows the user an approval card — nothing changes until they click Approve.
@@ -2431,6 +2448,7 @@ async function ask(userMsg){
           let r;
           try{
           if(t.name==='list_clients'){
+            if(_discoveryInFlight){ try{ await _discoveryInFlight; }catch(_){} }
             const cs=loadClients();
             const card=appendToolCard('google','Clients & connected platforms',cs.length+' client'+(cs.length===1?'':'s'));
             const out=cs.map(c=>({name:c.name,
@@ -2621,14 +2639,23 @@ async function discoverClients(){
   };
   /* find a client already holding this account id, else one with a matching
      name, else create — so re-running never duplicates rows */
+  /* "Acme (CMM Billing)" and "ACME" are the same client on two platforms:
+     compare names with the trailing bracket stripped and case/punctuation
+     folded. Never merge into a client that already holds a different id for
+     this platform — two accounts that share a name are two clients. */
+  const coreName=(n)=>String(n||'').toLowerCase().replace(/\s*\([^)]*\)\s*$/,'').replace(/[^a-z0-9]+/g,' ').trim();
+  const free=(x,plat,key)=>!(x[plat]&&x[plat][key]);
+  let managerId='';   // Google MCC id, learned from discovery
   const upsert=(plat,key,id,name,currency)=>{
     if(!id)return;
     let c=clients.find(x=>x[plat]&&x[plat][key]===id);
-    if(!c)c=clients.find(x=>(x.name||'').toLowerCase()===String(name||'').toLowerCase());
+    if(!c)c=clients.find(x=>free(x,plat,key)&&(x.name||'').toLowerCase()===String(name||'').toLowerCase());
+    if(!c){ const core=coreName(name); if(core)c=clients.find(x=>free(x,plat,key)&&coreName(x.name)===core); }
     if(!c){ c={id:'c'+Date.now()+Math.random().toString(36).slice(2,6),name:name||id,
       google:{cid:'',mgr:''},meta:{act:''},tiktok:{adv:''},linkedin:{acct:''},pinterest:{acct:''},reddit:{acct:''}};
       clients.push(c); added++; }
     c[plat]=c[plat]||{}; c[plat][key]=id;
+    if(plat==='google'&&managerId)c.google.mgr=managerId;   // child accounts authenticate through the MCC
     /* remember the account's own billing currency — everything downstream
        labels money with this instead of assuming anything */
     if(currency)c[plat].cur=currency;
@@ -2640,10 +2667,18 @@ async function discoverClients(){
     (d.accounts||[]).forEach(a=>upsert('meta','act',a.id,a.name,a.currency));
   }catch(e){ problems.push('Meta: '+e.message); }
 
+  let clearedMgr=0;
   for(const [src,plat,key] of [['google_accounts','google','cid'],['tiktok_accounts','tiktok','adv'],['linkedin_accounts','linkedin','acct'],['pinterest_accounts','pinterest','acct'],['reddit_accounts','reddit','acct']]){
     try{ const d=await call({source:src});
+      if(plat==='google'&&d.manager){
+        managerId=String(d.manager).replace(/-/g,'');
+        /* A client whose Google id IS the manager can never return metrics —
+           managers run no ads. Clear it; the real child accounts arrive below
+           as clients of their own. */
+        clients.forEach(c=>{ if(c.google&&String(c.google.cid||'').replace(/-/g,'')===managerId){ c.google.cid=''; clearedMgr++; } });
+      }
       (d.accounts||[]).forEach(a=>upsert(plat,key,a.id,a.name,a.currency));
-    }catch(e){ /* older worker: unknown source — not fatal */ problems.push(plat+': '+e.message); }
+    }catch(e){ problems.push(plat+': '+e.message); }
   }
 
   /* drop the placeholder migrated client if discovery replaced it */
@@ -2653,9 +2688,27 @@ async function discoverClients(){
   storeClients(); renderClients(); refreshDots();
   if(btn){ btn.disabled=false; btn.style.opacity=1; }
   const total=clients.length;
+  /* Say what actually failed. "Unknown source" means an old worker; anything
+     else is the platform's own message and the fix is usually in it. */
+  const why=(p)=>/Unknown source/i.test(p)?p.split(':')[0]+': redeploy worker.js':(p.length>120?p.slice(0,120)+'…':p);
   say(total+' client'+(total===1?'':'s')+' in the roster'+(added?' ('+added+' new)':'')+
-      (problems.length?' · not discoverable yet: '+problems.map(p=>p.split(':')[0]).join(', ')+
-       ' — redeploy worker.js to enable':''), false);
+      (clearedMgr?' · '+clearedMgr+' client'+(clearedMgr===1?' was':'s were')+' pointing Google at the manager account (no metrics there) — cleared':'')+
+      (problems.length?' · could not discover — '+problems.map(why).join(' | '):''), !!problems.length);
+  try{ localStorage.setItem(uKey('discovered'),JSON.stringify({at:Date.now(),ver:EXPECTED_WORKER_VERSION,problems:problems.length})); }catch(e){}
+  return {total,added,problems,clearedMgr};
+}
+
+/* Refresh the roster on every visit without anyone clicking anything, so a
+   credential added to the worker shows up in the app the next time it opens.
+   Throttled to 30 minutes, and forced whenever this app's version changes —
+   a redeploy is exactly when the roster is most likely to be stale. */
+let _discoveryInFlight=null;
+function autoDiscoverClients(){
+  if(!cfg.wurl||_discoveryInFlight)return;
+  let last=null; try{ last=JSON.parse(localStorage.getItem(uKey('discovered'))||'null'); }catch(e){}
+  const fresh=last&&last.ver===EXPECTED_WORKER_VERSION&&!last.problems&&(Date.now()-last.at)<30*60*1000;
+  if(fresh&&loadClients().length)return;
+  _discoveryInFlight=discoverClients().catch(function(){}).finally(function(){ _discoveryInFlight=null; });
 }
 
 
@@ -2663,7 +2716,7 @@ async function discoverClients(){
    One click answers "why is platform X not working": worker reachability,
    auth, worker version, then a live credential probe per platform with the
    exact fix. All probes run in the worker; no secret ever reaches here. */
-const EXPECTED_WORKER_VERSION='3.1.0';
+const EXPECTED_WORKER_VERSION='3.4.0';
 async function runDoctor(){
   const out=document.getElementById('doc-out'), btn=document.getElementById('doc-btn');
   out.style.display=''; out.innerHTML='';
@@ -3292,6 +3345,7 @@ function showApp(){
   loadCfg(); loadConvos(); renderSb();
   updateSidebarUser();
   autoLoadMetaAccounts();
+  autoDiscoverClients();
   maybeOfferInstall();
   if(!cfg.wurl) setTimeout(function(){ openMod('m-setup'); }, 600);
 }
