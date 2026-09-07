@@ -617,6 +617,30 @@ forecasts.
 
 ---
 
+## How accounts become clients
+
+The app keeps a **client roster**: every ad account the worker's credentials
+can reach, grouped by client name. The AI's `list_clients` tool reads it, and
+every "across all clients" question fans out over it. It refreshes itself:
+
+- **automatically each time the app opens** — throttled to 30 minutes, and
+  always after an app update or a run that hit errors;
+- on demand: **Configuration → Discover clients from connected accounts**.
+
+So after adding a platform's secrets and redeploying the worker, just reopen
+the app. Accounts that share a name across platforms — `Acme (CMM Billing)` on
+Google, `ACME` on TikTok — merge into one client; the trailing bracket and the
+case are ignored. Anything that doesn't match becomes a client of its own, so
+nothing the credentials can see is ever hidden. Rename or merge clients by hand
+in the same panel.
+
+A client that points Google at the **manager (MCC)** id is cleared during
+discovery: managers hold no ads and can never return metrics, and the child
+accounts arrive as clients of their own.
+
+If a platform still shows as not connected, the note under the Discover button
+says exactly what failed, in the platform's own words.
+
 ## Verify everything
 
 **Configuration → Connection Doctor → Run.**
@@ -637,6 +661,7 @@ redeploy `worker.js` before debugging anything else.
 
 | Symptom | Cause / fix |
 |---|---|
+| A platform says "No clients configured" or "not connected" while Connection Doctor is green | The roster hasn't refreshed since those credentials went in. Reopen the app, or click **Discover clients**; the note under the button names any failure |
 | `Unauthorized` on every call | Worker Auth Token in the app ≠ `AUTH_SECRET` on the worker |
 | Google `DEVELOPER_TOKEN_NOT_APPROVED` | Token still has test-account access — apply for Basic in API Center |
 | Google `USER_PERMISSION_DENIED` / 401 | Set `GOOGLE_ADS_LOGIN_CUSTOMER_ID` to your MCC ID (no dashes), and confirm the MCC links the client account |

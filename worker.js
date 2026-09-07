@@ -35,7 +35,7 @@
  * ------------------------------------------------------------------
  */
 
-const WORKER_VERSION = '3.3.0';   // bump when sources/behaviour change; the app's Connection Doctor compares it
+const WORKER_VERSION = '3.4.0';   // bump when sources/behaviour change; the app's Connection Doctor compares it
 
 /* Optional infrastructure (all feature-gated — the worker runs fine without):
    ADS_KV (KV namespace binding)  – enables the query cache, daily spend
@@ -737,7 +737,7 @@ async function googleAccounts(env) {
         if (c.manager) return;                       // skip manager nodes, keep real accounts
         accounts.push({ id: String(c.id), name: c.descriptiveName || String(c.id), currency: c.currencyCode });
       }));
-      return json({ accounts });
+      return json({ accounts, manager: mgr });     // manager: lets the app keep the MCC out of the roster
     }
   }
   // No manager configured — fall back to the directly accessible customers.
@@ -916,7 +916,7 @@ async function tiktokAds(body, env) {
   const token = env.TIKTOK_ACCESS_TOKEN || body.accessToken;
   const adv = body.advertiserId || env.TIKTOK_ADVERTISER_ID;
   if (!token) return json({ error: 'TikTok not configured — set the TIKTOK_ACCESS_TOKEN worker secret, or add your token in the app Configuration' });
-  if (!adv) return json({ error: 'No TikTok advertiser ID (set it in the app Config, or TIKTOK_ADVERTISER_ID secret)' });
+  if (!adv) return json({ error: 'No TikTok advertiser ID for this client — open Configuration → Discover clients so every advertiser the token can reach becomes a client (needs TIKTOK_APP_ID/APP_SECRET on the worker), or set TIKTOK_ADVERTISER_ID' });
 
   const base = 'https://business-api.tiktok.com/open_api/v1.3';
   const action = body.action || 'report';
