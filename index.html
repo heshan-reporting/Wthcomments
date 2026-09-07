@@ -1398,9 +1398,11 @@ textarea:focus,input:focus{outline:none}
         <h3>What you need</h3>
         <pre><code>① Google Client ID   — for user sign-in (see Google Sign-In tab)
 ② AI API Key         — your AI API key
-③ Cloudflare Worker  — proxy for Google Ads + Meta APIs (see Worker tab)
+③ Cloudflare Worker  — proxy for every ad platform (see Worker tab)
 ④ Google Ads creds   — developer token + OAuth (see Google Ads tab)
-⑤ Meta access token  — system user token (see Meta Ads tab)</code></pre>
+⑤ Meta access token  — system user token (see Meta Ads tab)
+⑥ Optional platforms — TikTok, LinkedIn, Pinterest, Reddit, WhatsApp</code></pre>
+        <div class="callout blue">Only the worker is mandatory — every platform is feature-gated, so Meta alone is a valid setup. Step-by-step for all of them, with console links: <a href="https://github.com/heshan-reporting/Wthcomments/blob/main/API-SETUP.md" target="_blank"><strong>API-SETUP.md</strong></a>.</div>
         <h3>Multi-user model</h3>
         <p>Each person who signs in with Google gets their own private config (API keys, Worker URL, Customer ID, Meta account) and conversation history — stored in their browser's localStorage. No shared backend needed.</p>
       </div>
@@ -1419,14 +1421,29 @@ textarea:focus,input:focus{outline:none}
         <div class="callout blue">The Client ID is public — it's safe to have in the HTML. Your actual AI and API credentials are never exposed.</div>
       </div>
       <div class="tpane" id="t-wk">
-        <p>Go to <a href="https://dash.cloudflare.com" target="_blank">dash.cloudflare.com</a> &rarr; Workers &amp; Pages &rarr; Create Worker &rarr; paste <strong>worker.js</strong> &rarr; Deploy. Then add the 7 secrets in Worker Settings &rarr; Variables.</p>
-        <pre><code>GOOGLE_ADS_DEVELOPER_TOKEN
+        <p>Go to <a href="https://dash.cloudflare.com" target="_blank">dash.cloudflare.com</a> &rarr; Workers &amp; Pages &rarr; Create Worker &rarr; paste <strong>worker.js</strong> &rarr; Deploy. Then add secrets in Worker Settings &rarr; <strong>Variables and Secrets</strong> (encrypted).</p>
+        <h3>Core</h3>
+        <pre><code>AUTH_SECRET                  &larr; must match "Worker Auth Token" in Config
+ANTHROPIC_API_KEY
+META_ACCESS_TOKEN
+META_AD_ACCOUNT_ID           (optional &mdash; accounts are auto-discovered)
+GOOGLE_ADS_DEVELOPER_TOKEN
 GOOGLE_ADS_CLIENT_ID
 GOOGLE_ADS_CLIENT_SECRET
 GOOGLE_ADS_REFRESH_TOKEN
-META_ACCESS_TOKEN
-META_AD_ACCOUNT_ID
-AUTH_SECRET</code></pre>
+GOOGLE_ADS_LOGIN_CUSTOMER_ID (your MCC id &mdash; fixes most Google 401s)</code></pre>
+        <h3>Extra platforms (each optional)</h3>
+        <pre><code>TIKTOK_ACCESS_TOKEN, TIKTOK_APP_ID, TIKTOK_APP_SECRET
+LINKEDIN_ACCESS_TOKEN or LINKEDIN_REFRESH_TOKEN + LINKEDIN_CLIENT_ID/SECRET
+PINTEREST_ACCESS_TOKEN or PINTEREST_REFRESH_TOKEN + PINTEREST_CLIENT_ID/SECRET
+REDDIT_REFRESH_TOKEN + REDDIT_CLIENT_ID/SECRET   (tokens expire daily)</code></pre>
+        <h3>Optional infrastructure</h3>
+        <pre><code>ADS_KV               KV namespace binding &mdash; cache, history, audit log
+CACHE_TTL            cache seconds (default 900)
+ALLOW_MUTATIONS      "true" to allow pause / budget changes
+MUTATION_MAX_BUDGET  cap on any budget set via the app
+CLIENTS_JSON         pin accounts to clients + monthly budgets</code></pre>
+        <div class="callout blue">Full walkthrough for every platform &mdash; consoles, scopes, token exchange and fixes &mdash; is in <a href="https://github.com/heshan-reporting/Wthcomments/blob/main/API-SETUP.md" target="_blank"><strong>API-SETUP.md</strong></a>. Check your work with <strong>Configuration &rarr; Connection Doctor</strong>.</div>
       </div>
       <div class="tpane" id="t-gc">
         <h3>Developer Token</h3>
