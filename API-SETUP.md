@@ -275,11 +275,15 @@ and tick the advertisers you want this app to read.
 **c. Read the code off the address bar.** You land back on your redirect URL:
 
 ```
-https://example.com/callback?auth_code=abc123def456&state=xyz
+https://example.com/callback?auth_code=abc123def456&code=abc123def456&state=xyz
 ```
 
-A browser error page there is fine — nothing needs to be listening. Copy the
-`auth_code` value: everything between `auth_code=` and the next `&`.
+A browser error page there is fine — nothing needs to be listening.
+
+TikTok appends **both `auth_code` and `code`**, usually carrying the same
+string. Take **`auth_code`** — that is the field the token endpoint expects.
+Copy everything between `auth_code=` and the next `&`; leave out the `&` and
+the `state`.
 
 **d. Exchange it, straight away.** The code is single-use and expires in minutes:
 
