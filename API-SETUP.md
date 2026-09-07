@@ -641,6 +641,7 @@ redeploy `worker.js` before debugging anything else.
 | Google `DEVELOPER_TOKEN_NOT_APPROVED` | Token still has test-account access — apply for Basic in API Center |
 | Google `USER_PERMISSION_DENIED` / 401 | Set `GOOGLE_ADS_LOGIN_CUSTOMER_ID` to your MCC ID (no dashes), and confirm the MCC links the client account |
 | Google `CUSTOMER_NOT_FOUND` | Use the 10-digit ID without dashes |
+| Google `REQUESTED_METRICS_FOR_MANAGER`, or a client returns no metrics | That client points at a manager (MCC) id. Managers run no ads — point it at a **child** account id, keeping the MCC in `GOOGLE_ADS_LOGIN_CUSTOMER_ID`. Check `CLIENTS_JSON` first: it overrides discovery, which already skips managers |
 | Google 404, HTML error page, both accounts fail identically | The pinned API version is retired — set `GOOGLE_ADS_API_VERSION` to a current version |
 | Google `invalid_grant` | Refresh token revoked — usually the consent screen is still in *Testing* (7-day expiry). Publish it, mint a new token |
 | Meta "token expired/invalid" | You used a user token — generate a **system user** token instead |

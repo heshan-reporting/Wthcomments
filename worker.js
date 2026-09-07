@@ -35,7 +35,7 @@
  * ------------------------------------------------------------------
  */
 
-const WORKER_VERSION = '3.2.0';   // bump when sources/behaviour change; the app's Connection Doctor compares it
+const WORKER_VERSION = '3.3.0';   // bump when sources/behaviour change; the app's Connection Doctor compares it
 
 /* Optional infrastructure (all feature-gated — the worker runs fine without):
    ADS_KV (KV namespace binding)  – enables the query cache, daily spend
@@ -209,6 +209,7 @@ async function health(body, env) {
     whatsapp: { token: has('WHATSAPP_TOKEN'), phone_id: has('WHATSAPP_PHONE_ID') },
   };
   const infra = {
+    clients_json: !!env.CLIENTS_JSON,   // pinned roster overrides account discovery
     kv: !!env.ADS_KV,
     mutations_enabled: String(env.ALLOW_MUTATIONS).toLowerCase() === 'true',
     cache_ttl_seconds: Math.max(60, Number(env.CACHE_TTL || 900)),
@@ -651,6 +652,7 @@ function googleFix(text, status, ver) {
   if (googleSunset(status, text))
     return 'That version is retired (Google sunsets each one ~1 year after release). Set the GOOGLE_ADS_API_VERSION worker variable to a current version — no redeploy of worker.js needed. The worker defaults to ' + GOOGLE_V + '.';
   if (/DEVELOPER_TOKEN_NOT_APPROVED/.test(text)) return 'Your developer token only works on test accounts — apply for Basic access in Google Ads → API Center';
+  if (/REQUESTED_METRICS_FOR_MANAGER/.test(text)) return 'That customer id is a manager (MCC) account. Managers run no ads of their own, so Google refuses metrics for them — point this client at a child account id and keep the MCC in GOOGLE_ADS_LOGIN_CUSTOMER_ID. If the roster is pinned by CLIENTS_JSON, fix the cid there; CLIENTS_JSON overrides account discovery, which already skips managers.';
   if (/USER_PERMISSION_DENIED/.test(text)) return 'The OAuth user cannot see this account — set GOOGLE_ADS_LOGIN_CUSTOMER_ID to your MCC id (no dashes) and make sure the MCC links to this client account';
   if (/CUSTOMER_NOT_FOUND|INVALID_CUSTOMER_ID/.test(text)) return 'The customer id is wrong — use the 10-digit id without dashes';
   if (/DEACTIVATED|CANCELED/i.test(text)) return 'That Google Ads account is deactivated/cancelled';
