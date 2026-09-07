@@ -23,7 +23,8 @@
  *   (optional) GOOGLE_ADS_API_VERSION – e.g. 'v25'; overrides the pinned default
  *              when Google retires a version (a retired version 404s with HTML)
  *   (optional) TIKTOK_ACCESS_TOKEN, TIKTOK_ADVERTISER_ID
- *   (optional) LINKEDIN_ACCESS_TOKEN, LINKEDIN_AD_ACCOUNT_ID, LINKEDIN_VERSION
+ *   (optional) LINKEDIN_ACCESS_TOKEN, LINKEDIN_AD_ACCOUNT_ID,
+ *              LINKEDIN_VERSION – YYYYMM; retired versions answer 426
  *   (optional) PINTEREST_ACCESS_TOKEN, PINTEREST_AD_ACCOUNT_ID,
  *              PINTEREST_CLIENT_ID, PINTEREST_CLIENT_SECRET, PINTEREST_REFRESH_TOKEN
  *   (optional) REDDIT_ACCESS_TOKEN, REDDIT_AD_ACCOUNT_ID,
@@ -35,7 +36,7 @@
  * ------------------------------------------------------------------
  */
 
-const WORKER_VERSION = '3.6.0';   // bump when sources/behaviour change; the app's Connection Doctor compares it
+const WORKER_VERSION = '3.7.0';   // bump when sources/behaviour change; the app's Connection Doctor compares it
 
 /* Optional infrastructure (all feature-gated — the worker runs fine without):
    ADS_KV (KV namespace binding)  – enables the query cache, daily spend
@@ -253,6 +254,7 @@ async function health(body, env) {
     }),
     probe('linkedin', async () => {
       if (!env.LINKEDIN_ACCESS_TOKEN && !env.LINKEDIN_REFRESH_TOKEN) return { skip: 'No LINKEDIN_ACCESS_TOKEN or refresh trio set' };
+      if (!env.LINKEDIN_ACCESS_TOKEN && !(env.LINKEDIN_CLIENT_ID && env.LINKEDIN_CLIENT_SECRET)) return { ok: false, error: 'LINKEDIN_REFRESH_TOKEN is set but LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET are not', fix: 'A refresh token cannot be exchanged without the client pair — add both as worker secrets' };
       const r = await linkedinAds({ action: 'accounts', count: 1 }, env);
       const d = await r.json();
       if (d.error) return { ok: false, error: d.error, fix: /401/.test(d.error) ? 'Access token expired — add LINKEDIN_REFRESH_TOKEN + LINKEDIN_CLIENT_ID/SECRET so it auto-renews, or paste a fresh token' : (/403/.test(d.error) ? 'The token is missing the r_ads scope, or the app lacks Marketing API access' : 'Check the token and LinkedIn-Version') };
@@ -571,7 +573,7 @@ async function linkedinMutate(body, env) {
     return { error: 'Only pause/enable are supported for LinkedIn (budget changes are not wired yet)' };
   const r = await fetch(`https://api.linkedin.com/rest/adAccounts/${acct}/adCampaigns/${String(body.campaignId).replace(/^urn:li:sponsoredCampaign:/, '')}`, {
     method: 'POST',
-    headers: { Authorization: 'Bearer ' + token, 'LinkedIn-Version': env.LINKEDIN_VERSION || '202506',
+    headers: { Authorization: 'Bearer ' + token, 'LinkedIn-Version': linkedinV(env),
       'X-Restli-Protocol-Version': '2.0.0', 'X-RestLi-Method': 'PARTIAL_UPDATE', 'Content-Type': 'application/json' },
     body: JSON.stringify({ patch: { $set: { status: body.action === 'pause' ? 'PAUSED' : 'ACTIVE' } } }),
   });
@@ -808,14 +810,14 @@ async function tiktokAccounts(body, env) {
 }
 
 async function linkedinAccounts(body, env) {
-  const token = env.LINKEDIN_ACCESS_TOKEN || body.accessToken;
-  if (!token) return json({ error: 'LinkedIn not configured (set LINKEDIN_ACCESS_TOKEN)' });
-  const r = await fetch('https://api.linkedin.com/rest/adAccounts?q=search&pageSize=100', {
-    headers: { Authorization: 'Bearer ' + token, 'LinkedIn-Version': env.LINKEDIN_VERSION || '202506', 'X-Restli-Protocol-Version': '2.0.0' },
-  });
+  const auth = linkedinAuth(body, env);
+  if (!(await auth.ready())) return json({ error: LINKEDIN_UNCONFIGURED });
+  const url = 'https://api.linkedin.com/rest/adAccounts?q=search&pageSize=100';
+  let r = await fetch(url, { headers: auth.headers() });
+  if (r.status === 401 && await auth.tryRefresh()) r = await fetch(url, { headers: auth.headers() });
   const t = await r.text();
   let d; try { d = JSON.parse(t); } catch (_) { d = null; }
-  if (!r.ok) return json({ error: 'LinkedIn ' + r.status + ': ' + ((d && d.message) || t.slice(0, 200)) });
+  if (!r.ok) return json({ error: linkedinErr(r.status, (d && d.message) || t.slice(0, 200), env) });
   const accounts = ((d && d.elements) || []).map((a) => ({ id: String(a.id), name: a.name || String(a.id), currency: a.currency }));
   return json({ accounts });
 }
@@ -1022,62 +1024,72 @@ async function tiktokAds(body, env) {
   return json({ data: list, total: list.length, page_info: resp.data && resp.data.page_info });
 }
 
+/* LinkedIn retires each dated version about a year after release, and a
+   retired one answers 426. Override with LINKEDIN_VERSION (YYYYMM). */
+const LINKEDIN_V = '202608';
+const linkedinV = (env) => (env && env.LINKEDIN_VERSION) || LINKEDIN_V;
+
+/* Shared LinkedIn auth so discovery and queries authenticate identically:
+   an access token, a refresh trio, or both. The trio alone is a complete
+   configuration — access tokens die every 60 days. */
+function linkedinAuth(body, env) {
+  let token = env.LINKEDIN_ACCESS_TOKEN || (body && body.accessToken) || '';
+  const refreshToken = env.LINKEDIN_REFRESH_TOKEN || (body && body.refreshToken) || '';
+  let refreshed = false;
+  const a = {
+    headers: () => ({ Authorization: 'Bearer ' + token, 'LinkedIn-Version': linkedinV(env), 'X-Restli-Protocol-Version': '2.0.0' }),
+    tryRefresh: async () => {
+      if (refreshed || !refreshToken || !env.LINKEDIN_CLIENT_ID || !env.LINKEDIN_CLIENT_SECRET) return false;
+      refreshed = true;
+      const r = await fetch('https://www.linkedin.com/oauth/v2/accessToken', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken,
+          client_id: env.LINKEDIN_CLIENT_ID, client_secret: env.LINKEDIN_CLIENT_SECRET }),
+      });
+      const d = await r.json().catch(() => null);
+      if (d && d.access_token) { token = d.access_token; return true; }
+      return false;
+    },
+    ready: async () => !!token || await a.tryRefresh(),
+  };
+  return a;
+}
+const LINKEDIN_UNCONFIGURED = 'LinkedIn not configured — set the refresh trio (LINKEDIN_REFRESH_TOKEN + LINKEDIN_CLIENT_ID + LINKEDIN_CLIENT_SECRET) so tokens renew themselves, or LINKEDIN_ACCESS_TOKEN for a 60-day token, or add a token in the app Configuration';
+
+/* 426 means the LinkedIn-Version header names a retired version. */
+function linkedinErr(status, msg, env) {
+  if (status === 426) return 'LinkedIn 426: API version ' + linkedinV(env) + ' is retired (LinkedIn sunsets each version about a year after release). Set the LINKEDIN_VERSION worker variable to a current YYYYMM version — no redeploy needed.';
+  if (status === 403) return 'LinkedIn 403: ' + msg + ' — the token is missing r_ads / r_ads_reporting, or the app has no Advertising API access approved';
+  return 'LinkedIn ' + status + ': ' + msg;
+}
+
 /* ── LINKEDIN Marketing API ───────────────────────────────────────── */
 // Actions: analytics (default) | campaigns | campaign_groups | creatives | accounts
 // Uses the versioned REST API (Restli 2.0). Parentheses in Restli query
 // syntax must stay raw — never run these query strings through URLSearchParams.
 async function linkedinAds(body, env) {
-  let token = env.LINKEDIN_ACCESS_TOKEN || body.accessToken;
-  const LI_V = env.LINKEDIN_VERSION || '202506';
+  const auth = linkedinAuth(body, env);
   const BASE = 'https://api.linkedin.com/rest';
   const acctId = String(body.accountId || env.LINKEDIN_AD_ACCOUNT_ID || '')
     .replace(/^urn:li:sponsoredAccount:/, '').trim();
   const action = body.action || 'analytics';
   const count = Math.min(Number(body.count) || 50, 100);
 
-  const mkHeaders = () => ({
-    Authorization: 'Bearer ' + token,
-    'LinkedIn-Version': LI_V,
-    'X-Restli-Protocol-Version': '2.0.0',
-  });
-
-  // Refresh-on-401: needs a refresh token (secret or app config) plus
-  // LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET worker secrets.
-  const refreshToken = env.LINKEDIN_REFRESH_TOKEN || body.refreshToken;
-  let refreshed = false;
-  const tryRefresh = async () => {
-    if (refreshed || !refreshToken || !env.LINKEDIN_CLIENT_ID || !env.LINKEDIN_CLIENT_SECRET) return false;
-    refreshed = true;
-    const r = await fetch('https://www.linkedin.com/oauth/v2/accessToken', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: refreshToken,
-        client_id: env.LINKEDIN_CLIENT_ID,
-        client_secret: env.LINKEDIN_CLIENT_SECRET,
-      }),
-    });
-    const d = await r.json().catch(() => null);
-    if (d && d.access_token) { token = d.access_token; return true; }
-    return false;
-  };
-  // Refresh-first: a refresh trio alone is a valid configuration (access
-  // tokens die every 60 days; the refresh token is what keeps working).
-  if (!token && !(await tryRefresh()))
-    return json({ error: 'LinkedIn not configured — set LINKEDIN_ACCESS_TOKEN, or the refresh trio (LINKEDIN_REFRESH_TOKEN + LINKEDIN_CLIENT_ID/SECRET), or add your token in the app Configuration' });
+  // Refresh-first: a refresh trio alone is a valid configuration.
+  if (!(await auth.ready())) return json({ error: LINKEDIN_UNCONFIGURED });
 
   const liFetch = async (url) => {
-    let res = await fetch(url, { headers: mkHeaders() });
-    if (res.status === 401 && await tryRefresh()) {
-      res = await fetch(url, { headers: mkHeaders() });
+    let res = await fetch(url, { headers: auth.headers() });
+    if (res.status === 401 && await auth.tryRefresh()) {
+      res = await fetch(url, { headers: auth.headers() });
     }
     const text = await res.text();
     let data;
     try { data = JSON.parse(text); } catch (_) { data = null; }
     if (!res.ok) {
       const msg = (data && (data.message || data.error_description)) || text.slice(0, 300);
-      return { error: 'LinkedIn ' + res.status + ': ' + msg };
+      return { error: linkedinErr(res.status, msg, env) };
     }
     return { data };
   };

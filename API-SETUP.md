@@ -427,11 +427,19 @@ number in the URL `.../campaignmanager/accounts/{id}/`. Numeric only, no
 | `LINKEDIN_CLIENT_ID` | from the Auth tab |
 | `LINKEDIN_CLIENT_SECRET` | from the Auth tab |
 | `LINKEDIN_AD_ACCOUNT_ID` | *(optional)* default account |
-| `LINKEDIN_VERSION` | *(optional)* API version, defaults to `202506` |
+| `LINKEDIN_VERSION` | *(optional)* `YYYYMM` API version, defaults to `202608` |
 
 The refresh **trio** (`REFRESH_TOKEN` + `CLIENT_ID` + `CLIENT_SECRET`) on its own
 is a complete configuration — the worker mints an access token when it needs
-one. That is the setup you want.
+one, for account discovery as well as queries. That is the setup you want. A
+refresh token **without** the client pair cannot be exchanged and counts as
+unconfigured.
+
+> **LinkedIn retires each dated version about a year after release**, and a
+> retired one answers `426 Upgrade Required`. When that happens, set
+> `LINKEDIN_VERSION` to a current `YYYYMM` — a variable change, no redeploy.
+> Current versions are listed on LinkedIn's
+> [versioning page](https://learn.microsoft.com/en-us/linkedin/marketing/versioning).
 
 ---
 
@@ -686,6 +694,7 @@ redeploy `worker.js` before debugging anything else.
 | TikTok "Set TIKTOK_APP_ID and TIKTOK_APP_SECRET" | Advertiser discovery needs the app pair, not just the token |
 | LinkedIn 401 | Access token past 60 days — add the refresh trio so it renews itself |
 | LinkedIn 403 | Missing `r_ads`, or the app doesn't have Advertising API access approved |
+| LinkedIn 426 | The pinned version is retired — set `LINKEDIN_VERSION` to a current `YYYYMM` |
 | Pinterest 401 | Token past ~30 days — set `PINTEREST_REFRESH_TOKEN` + client ID/secret |
 | Reddit works one day, fails the next | You set only `REDDIT_ACCESS_TOKEN`. Set the refresh trio |
 | Reddit `refresh failed` | Check client ID/secret, and that the token was minted with `duration=permanent` and the `adsread` scope |
