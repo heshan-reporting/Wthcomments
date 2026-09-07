@@ -2764,9 +2764,16 @@ async function runDoctor(){
       return;
     }
     if(j.error){ row('✗','var(--red)','Worker error',j.error); return; }
-    const vOk=j.version===EXPECTED_WORKER_VERSION;
-    row(vOk?'✓':'△',vOk?'var(--grn)':'var(--amb)','Worker reachable · version '+(j.version||'unknown'),
-      vOk?'Auth OK, running the latest code.':'This app expects version '+EXPECTED_WORKER_VERSION+' — redeploy worker.js from the repo to pick up the newest fixes.');
+    /* Compare properly: a worker NEWER than this app is fine and means the
+       app is the one behind — telling the user to redeploy the worker in that
+       case sends them the wrong way. */
+    const cmpVer=(a,b)=>{ const P=(v)=>String(v||'').split('.').map(n=>parseInt(n,10)||0); const x=P(a),y=P(b);
+      for(let i=0;i<3;i++){ if((x[i]||0)!==(y[i]||0))return (x[i]||0)>(y[i]||0)?1:-1; } return 0; };
+    const vc=j.version?cmpVer(j.version,EXPECTED_WORKER_VERSION):-1;
+    row(vc>=0?'✓':'△',vc>=0?'var(--grn)':'var(--amb)','Worker reachable · version '+(j.version||'unknown'),
+      vc===0?'Auth OK, running the latest code.'
+      :vc>0?'The worker is newer than this app (the app expects '+EXPECTED_WORKER_VERSION+'). Nothing is broken — publish the latest index.html (merge the open PR) and the two will match.'
+      :'This app expects version '+EXPECTED_WORKER_VERSION+' — redeploy worker.js from the repo to pick up the newest fixes.');
     if(j.infra){
       row(j.infra.kv?'✓':'○',j.infra.kv?'var(--grn)':'var(--text-3)',
         'Persistence (cache · spend history · audit log)'+(j.infra.kv?' — on':' — off'),
