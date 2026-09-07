@@ -642,8 +642,10 @@ whichever of these it has: the **Manager Account ID** in Configuration, or the
 the handful of customers the OAuth user touches directly, without names, and
 the note under the Discover button says so.
 
-If a platform still shows as not connected, the note under the Discover button
-says exactly what failed, in the platform's own words.
+The note under the Discover button lists platforms with no credentials as
+"not set up yet" — that is information, not an error, and it never triggers a
+re-run. Anything that actually failed is shown in red with the platform's own
+message.
 
 ## Verify everything
 

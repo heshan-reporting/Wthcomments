@@ -2628,7 +2628,8 @@ async function discoverClients(){
   say('Looking up connected accounts…');
   loadClients();
   const before=clients.length;
-  let added=0, problems=[];
+  let added=0, problems=[], unconfigured=[];
+  const fail=(plat,msg)=>(/not configured|is not set\b/i.test(msg)?unconfigured:problems).push(plat+': '+msg);
 
   const call=async(body)=>{
     const r=await fetch(cfg.wurl,{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':cfg.wsec||''},body:JSON.stringify(body)});
@@ -2665,7 +2666,7 @@ async function discoverClients(){
 
   try{ const d=await call({source:'meta_accounts'});
     (d.accounts||[]).forEach(a=>upsert('meta','act',a.id,a.name,a.currency));
-  }catch(e){ problems.push('Meta: '+e.message); }
+  }catch(e){ fail('Meta',e.message); }
 
   let clearedMgr=0, warnings=[];
   const digits=(v)=>String(v||'').replace(/-/g,'');
@@ -2688,7 +2689,7 @@ async function discoverClients(){
         if(d.note)warnings.push('Google: '+d.note);
       }
       (d.accounts||[]).forEach(a=>upsert(plat,key,a.id,a.name,a.currency));
-    }catch(e){ problems.push(plat+': '+e.message); }
+    }catch(e){ fail(plat,e.message); }
   }
 
   /* drop the placeholder migrated client if discovery replaced it */
@@ -2703,10 +2704,11 @@ async function discoverClients(){
   const why=(p)=>/Unknown source/i.test(p)?p.split(':')[0]+': redeploy worker.js':(p.length>120?p.slice(0,120)+'…':p);
   say(total+' client'+(total===1?'':'s')+' in the roster'+(added?' ('+added+' new)':'')+
       (clearedMgr?' · '+clearedMgr+' client'+(clearedMgr===1?' was':'s were')+' pointing Google at the manager account (no metrics there) — cleared':'')+
+      (unconfigured.length?' · not set up yet: '+unconfigured.map(p=>p.split(':')[0]).join(', '):'')+
       (warnings.length?' · '+warnings.join(' | '):'')+
       (problems.length?' · could not discover — '+problems.map(why).join(' | '):''), !!(problems.length||warnings.length));
   try{ localStorage.setItem(uKey('discovered'),JSON.stringify({at:Date.now(),ver:EXPECTED_WORKER_VERSION,problems:problems.length})); }catch(e){}
-  return {total,added,problems,clearedMgr};
+  return {total,added,problems,unconfigured,clearedMgr};
 }
 
 /* Refresh the roster on every visit without anyone clicking anything, so a
