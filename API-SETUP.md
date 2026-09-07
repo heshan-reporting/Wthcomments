@@ -282,8 +282,19 @@ A browser error page there is fine — nothing needs to be listening.
 
 TikTok appends **both `auth_code` and `code`**, usually carrying the same
 string. Take **`auth_code`** — that is the field the token endpoint expects.
-Copy everything between `auth_code=` and the next `&`; leave out the `&` and
-the `state`.
+
+The code is a **40-character hex string**, and hand-selecting it from the
+address bar loses a character depressingly often. Rather than select it, copy
+the whole redirect URL and let the shell cut it out:
+
+```bash
+URL='PASTE_THE_ENTIRE_REDIRECT_URL_HERE'
+CODE=$(printf '%s' "$URL" | sed -n 's/.*[?&]auth_code=\([^&]*\).*/\1/p')
+echo "code: $CODE  (${#CODE} chars — expect 40)"
+```
+
+If that count is not 40 the copy is short — recopy the URL rather than
+spending an `auth_code` on it.
 
 **d. Exchange it, straight away.** The code is single-use and expires in minutes:
 
@@ -313,8 +324,13 @@ A success looks like:
 The `access_token` **does not expire** unless revoked. `advertiser_ids` lists
 the advertisers you just authorised.
 
-If you get `auth_code is invalid`, the code was already used or has expired —
-redo (a) through (d); they're cheap to repeat.
+`40002 · the input data is invalid for the associated parameter` means the
+request was well-formed but a value was rejected — nearly always the
+`auth_code`: already used, expired, or short a character. Check its length,
+then redo (a) through (d); they're cheap to repeat.
+
+Using `$CODE` from the extractor above needs **double** quotes on `-d` so the
+variable expands — single quotes send the literal text `$CODE`.
 
 Shortcut for a single account: **TikTok Ads Manager → Tools → API** also issues a
 long-lived token, but it can't do advertiser discovery.
