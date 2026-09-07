@@ -2667,15 +2667,25 @@ async function discoverClients(){
     (d.accounts||[]).forEach(a=>upsert('meta','act',a.id,a.name,a.currency));
   }catch(e){ problems.push('Meta: '+e.message); }
 
-  let clearedMgr=0;
+  let clearedMgr=0, warnings=[];
+  const digits=(v)=>String(v||'').replace(/-/g,'');
   for(const [src,plat,key] of [['google_accounts','google','cid'],['tiktok_accounts','tiktok','adv'],['linkedin_accounts','linkedin','acct'],['pinterest_accounts','pinterest','acct'],['reddit_accounts','reddit','acct']]){
-    try{ const d=await call({source:src});
-      if(plat==='google'&&d.manager){
-        managerId=String(d.manager).replace(/-/g,'');
+    try{
+      const req={source:src};
+      /* Discovery must look through the same MCC the queries do, or it sees
+         only the handful of customers the OAuth user touches directly. */
+      if(plat==='google'&&cfg.gmgr)req.managerId=digits(cfg.gmgr);
+      const d=await call(req);
+      if(plat==='google'){
+        /* Learn the manager id from whichever source has it: the worker's
+           reply, the Configuration field, or a client that already records it. */
+        const known=clients.find(x=>x.google&&x.google.mgr);
+        managerId=digits(d.manager||cfg.gmgr||(known&&known.google.mgr)||'');
         /* A client whose Google id IS the manager can never return metrics —
            managers run no ads. Clear it; the real child accounts arrive below
            as clients of their own. */
-        clients.forEach(c=>{ if(c.google&&String(c.google.cid||'').replace(/-/g,'')===managerId){ c.google.cid=''; clearedMgr++; } });
+        if(managerId)clients.forEach(c=>{ if(c.google&&digits(c.google.cid)===managerId){ c.google.cid=''; clearedMgr++; } });
+        if(d.note)warnings.push('Google: '+d.note);
       }
       (d.accounts||[]).forEach(a=>upsert(plat,key,a.id,a.name,a.currency));
     }catch(e){ problems.push(plat+': '+e.message); }
@@ -2693,7 +2703,8 @@ async function discoverClients(){
   const why=(p)=>/Unknown source/i.test(p)?p.split(':')[0]+': redeploy worker.js':(p.length>120?p.slice(0,120)+'…':p);
   say(total+' client'+(total===1?'':'s')+' in the roster'+(added?' ('+added+' new)':'')+
       (clearedMgr?' · '+clearedMgr+' client'+(clearedMgr===1?' was':'s were')+' pointing Google at the manager account (no metrics there) — cleared':'')+
-      (problems.length?' · could not discover — '+problems.map(why).join(' | '):''), !!problems.length);
+      (warnings.length?' · '+warnings.join(' | '):'')+
+      (problems.length?' · could not discover — '+problems.map(why).join(' | '):''), !!(problems.length||warnings.length));
   try{ localStorage.setItem(uKey('discovered'),JSON.stringify({at:Date.now(),ver:EXPECTED_WORKER_VERSION,problems:problems.length})); }catch(e){}
   return {total,added,problems,clearedMgr};
 }
@@ -2716,7 +2727,7 @@ function autoDiscoverClients(){
    One click answers "why is platform X not working": worker reachability,
    auth, worker version, then a live credential probe per platform with the
    exact fix. All probes run in the worker; no secret ever reaches here. */
-const EXPECTED_WORKER_VERSION='3.4.0';
+const EXPECTED_WORKER_VERSION='3.5.0';
 async function runDoctor(){
   const out=document.getElementById('doc-out'), btn=document.getElementById('doc-btn');
   out.style.display=''; out.innerHTML='';

@@ -636,7 +636,11 @@ in the same panel.
 
 A client that points Google at the **manager (MCC)** id is cleared during
 discovery: managers hold no ads and can never return metrics, and the child
-accounts arrive as clients of their own.
+accounts arrive as clients of their own. Discovery looks through the MCC using
+whichever of these it has: the **Manager Account ID** in Configuration, or the
+`GOOGLE_ADS_LOGIN_CUSTOMER_ID` worker secret. With neither, Google only lists
+the handful of customers the OAuth user touches directly, without names, and
+the note under the Discover button says so.
 
 If a platform still shows as not connected, the note under the Discover button
 says exactly what failed, in the platform's own words.

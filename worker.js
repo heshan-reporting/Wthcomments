@@ -35,7 +35,7 @@
  * ------------------------------------------------------------------
  */
 
-const WORKER_VERSION = '3.4.0';   // bump when sources/behaviour change; the app's Connection Doctor compares it
+const WORKER_VERSION = '3.5.0';   // bump when sources/behaviour change; the app's Connection Doctor compares it
 
 /* Optional infrastructure (all feature-gated — the worker runs fine without):
    ADS_KV (KV namespace binding)  – enables the query cache, daily spend
@@ -165,7 +165,7 @@ async function routeSource(source, body, env) {
   if (source === 'google_ads')    return await googleAds(body, env);
   if (source === 'meta_ads')      return await metaAds(body, env);
   if (source === 'meta_accounts') return await metaAccounts(env);
-  if (source === 'google_accounts')   return await googleAccounts(env);
+  if (source === 'google_accounts')   return await googleAccounts(body, env);
   if (source === 'tiktok_accounts')   return await tiktokAccounts(body, env);
   if (source === 'linkedin_accounts') return await linkedinAccounts(body, env);
   if (source === 'pinterest_accounts') return await pinterestAccounts(body, env);
@@ -713,13 +713,16 @@ async function metaAccounts(env) {
 
 /* ── ACCOUNT DISCOVERY: every account the credentials can reach ─────
    Used by the app's "Discover clients" button to build the client roster. */
-async function googleAccounts(env) {
+async function googleAccounts(body, env) {
   const dev = env.GOOGLE_ADS_DEVELOPER_TOKEN;
   if (!dev) return json({ error: 'GOOGLE_ADS_DEVELOPER_TOKEN secret is not set' });
   const tok = await googleAccessToken(env);
   if (tok.error) return json({ error: tok.error });
   const headers = { Authorization: 'Bearer ' + tok.token, 'developer-token': dev, 'Content-Type': 'application/json' };
-  const mgr = String(env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || '').replace(/-/g, '');
+  // The manager id may arrive from the app's Configuration (managerId) or the
+  // worker secret — same precedence as googleAds(), so discovery and queries
+  // always agree on which MCC they are looking through.
+  const mgr = String((body && body.managerId) || env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || '').replace(/-/g, '');
 
   // With a manager account, list the clients under it (names included).
   if (mgr) {
@@ -749,7 +752,8 @@ async function googleAccounts(env) {
     const id = String(rn).split('/').pop();
     return { id, name: id };
   });
-  return json({ accounts });
+  return json({ accounts, manager: '',
+    note: 'No manager (MCC) id was available, so this is only the list of customers the OAuth user touches directly, without names. Set GOOGLE_ADS_LOGIN_CUSTOMER_ID on the worker, or the Manager Account ID in Configuration, to list every client account under the MCC.' });
 }
 
 async function tiktokAccounts(body, env) {
