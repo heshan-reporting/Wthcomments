@@ -225,7 +225,7 @@ Both are the 10-digit ID **without dashes** (`3219604662`, not `321-960-4662`).
 | `GOOGLE_ADS_CLIENT_ID` | OAuth client ID |
 | `GOOGLE_ADS_CLIENT_SECRET` | OAuth client secret |
 | `GOOGLE_ADS_REFRESH_TOKEN` | from the Playground |
-| `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | MCC ID, no dashes — **set this if you use an MCC** |
+| `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | MCC ID, no dashes — optional: discovery finds reachable managers itself; set it to pin one, and for the WhatsApp/cron paths |
 | `GOOGLE_ADS_CUSTOMER_ID` | *(optional)* default account |
 | `GOOGLE_ADS_API_VERSION` | *(optional)* e.g. `v25` — overrides the pinned version |
 
@@ -237,9 +237,10 @@ Both are the 10-digit ID **without dashes** (`3219604662`, not `321-960-4662`).
 > [sunset dates](https://developers.google.com/google-ads/api/docs/sunset-dates)
 > page.
 
-> `GOOGLE_ADS_LOGIN_CUSTOMER_ID` missing is the single most common Google
-> failure — client accounts under an MCC return `USER_PERMISSION_DENIED` / 401
-> without it.
+> A query against a client account under an MCC returns `USER_PERMISSION_DENIED`
+> unless it authenticates through the MCC. Discovered accounts carry their MCC
+> automatically; a hand-entered customer id needs the Manager Account ID in
+> Configuration or this secret.
 
 ---
 
@@ -636,11 +637,14 @@ in the same panel.
 
 A client that points Google at the **manager (MCC)** id is cleared during
 discovery: managers hold no ads and can never return metrics, and the child
-accounts arrive as clients of their own. Discovery looks through the MCC using
-whichever of these it has: the **Manager Account ID** in Configuration, or the
-`GOOGLE_ADS_LOGIN_CUSTOMER_ID` worker secret. With neither, Google only lists
-the handful of customers the OAuth user touches directly, without names, and
-the note under the Discover button says so.
+accounts arrive as clients of their own. Discovery finds manager accounts by
+itself: it starts from every customer the OAuth user can reach directly and
+expands any that is a manager into its client accounts, each remembering which
+MCC to authenticate through. Set the **Manager Account ID** in Configuration or
+the `GOOGLE_ADS_LOGIN_CUSTOMER_ID` secret only to pin a specific MCC. If no MCC
+is reachable from the OAuth user at all, only directly accessible accounts
+appear, and the note under the Discover button says so — the fix is to give
+that user access to the MCC.
 
 The note under the Discover button lists platforms with no credentials as
 "not set up yet" — that is information, not an error, and it never triggers a

@@ -35,7 +35,7 @@
  * ------------------------------------------------------------------
  */
 
-const WORKER_VERSION = '3.5.0';   // bump when sources/behaviour change; the app's Connection Doctor compares it
+const WORKER_VERSION = '3.6.0';   // bump when sources/behaviour change; the app's Connection Doctor compares it
 
 /* Optional infrastructure (all feature-gated — the worker runs fine without):
    ADS_KV (KV namespace binding)  – enables the query cache, daily spend
@@ -241,7 +241,7 @@ async function health(body, env) {
       const t = await r.text();
       if (!r.ok) return { ok: false, error: googleErr(r.status, t, googleV(env)), fix: googleFix(t, r.status, googleV(env)) };
       let n = 0; try { n = (JSON.parse(t).resourceNames || []).length; } catch (_) {}
-      const mccNote = env.GOOGLE_ADS_LOGIN_CUSTOMER_ID ? '' : ' · no GOOGLE_ADS_LOGIN_CUSTOMER_ID set — client accounts under an MCC will 403 without it';
+      const mccNote = env.GOOGLE_ADS_LOGIN_CUSTOMER_ID ? '' : ' · no GOOGLE_ADS_LOGIN_CUSTOMER_ID set — discovery will find any manager (MCC) this user can reach and list its client accounts; set it only to pin one';
       return { ok: true, detail: n + ' accessible customer(s)' + mccNote };
     }),
     probe('tiktok', async () => {
@@ -718,42 +718,72 @@ async function googleAccounts(body, env) {
   if (!dev) return json({ error: 'GOOGLE_ADS_DEVELOPER_TOKEN secret is not set' });
   const tok = await googleAccessToken(env);
   if (tok.error) return json({ error: tok.error });
-  const headers = { Authorization: 'Bearer ' + tok.token, 'developer-token': dev, 'Content-Type': 'application/json' };
-  // The manager id may arrive from the app's Configuration (managerId) or the
-  // worker secret — same precedence as googleAds(), so discovery and queries
-  // always agree on which MCC they are looking through.
-  const mgr = String((body && body.managerId) || env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || '').replace(/-/g, '');
-
-  // With a manager account, list the clients under it (names included).
-  if (mgr) {
-    headers['login-customer-id'] = mgr;
-    const q = `SELECT customer_client.id, customer_client.descriptive_name, customer_client.manager, customer_client.status, customer_client.currency_code
-               FROM customer_client WHERE customer_client.status = 'ENABLED'`;
-    const res = await fetch(`https://googleads.googleapis.com/${googleV(env)}/customers/${mgr}/googleAds:searchStream`,
-      { method: 'POST', headers, body: JSON.stringify({ query: q }) });
+  const V = googleV(env), base = `https://googleads.googleapis.com/${V}`;
+  const hdr = (login) => Object.assign({ Authorization: 'Bearer ' + tok.token, 'developer-token': dev, 'Content-Type': 'application/json' },
+    login ? { 'login-customer-id': login } : {});
+  const rows = async (cid, login, query) => {
+    const res = await fetch(`${base}/customers/${cid}/googleAds:searchStream`, { method: 'POST', headers: hdr(login), body: JSON.stringify({ query }) });
     const text = await res.text();
-    if (res.ok) {
-      let batches; try { batches = JSON.parse(text); } catch (_) { batches = []; }
-      const accounts = [];
-      (Array.isArray(batches) ? batches : [batches]).forEach((b) => (b.results || []).forEach((r) => {
-        const c = r.customerClient || {};
-        if (c.manager) return;                       // skip manager nodes, keep real accounts
-        accounts.push({ id: String(c.id), name: c.descriptiveName || String(c.id), currency: c.currencyCode });
-      }));
-      return json({ accounts, manager: mgr });     // manager: lets the app keep the MCC out of the roster
+    if (!res.ok) return { error: googleErr(res.status, text, V) };
+    let batches; try { batches = JSON.parse(text); } catch (_) { return { error: 'Bad Google response' }; }
+    const out = []; (Array.isArray(batches) ? batches : [batches]).forEach((b) => (b.results || []).forEach((r) => out.push(r)));
+    return { rows: out };
+  };
+  // Every enabled, non-manager account under a manager, each recording the
+  // manager so queries can authenticate through it.
+  const childrenOf = async (m) => {
+    const r = await rows(m, m, `SELECT customer_client.id, customer_client.descriptive_name, customer_client.manager, customer_client.status, customer_client.currency_code FROM customer_client WHERE customer_client.status = 'ENABLED'`);
+    if (r.error) return r;
+    return { accounts: r.rows.map((x) => x.customerClient || {}).filter((c) => !c.manager)
+      .map((c) => ({ id: String(c.id), name: c.descriptiveName || String(c.id), currency: c.currencyCode, manager: m })) };
+  };
+
+  // A configured manager wins — from the app's Configuration or the worker
+  // secret, the same precedence googleAds() uses. If it can't be read, keep
+  // going and find one instead of returning nothing.
+  const problems = [];
+  const mgr = String((body && body.managerId) || env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || '').replace(/-/g, '');
+  if (mgr) {
+    const r = await childrenOf(mgr);
+    if (!r.error) return json({ accounts: r.accounts, manager: mgr, managers: [mgr] });
+    problems.push('Configured manager ' + mgr + ': ' + r.error);
+  }
+
+  // No usable manager configured. Start from every customer the OAuth user
+  // touches directly, ask each what it is, and expand the managers among
+  // them — that is where an agency's client accounts live, and it needs no
+  // configuration at all.
+  const r = await fetch(`${base}/customers:listAccessibleCustomers`, { headers: hdr() });
+  const t = await r.text();
+  if (!r.ok) return json({ error: googleErr(r.status, t, V), fix: googleFix(t, r.status, V) });
+  let d; try { d = JSON.parse(t); } catch (_) { return json({ error: 'Bad Google response' }); }
+  const ids = (d.resourceNames || []).map((rn) => String(rn).split('/').pop());
+
+  const selves = await Promise.all(ids.map((id) => rows(id, id, 'SELECT customer.id, customer.descriptive_name, customer.manager, customer.currency_code FROM customer')));
+  const accounts = [], managers = [];
+  // Prefer the copy that records a manager: an account reachable both directly
+  // and through an MCC should authenticate through the MCC like its siblings.
+  const add = (a) => { const i = accounts.findIndex((x) => x.id === a.id); if (i < 0) accounts.push(a); else if (a.manager && !accounts[i].manager) accounts[i] = a; };
+  for (let i = 0; i < ids.length; i++) {
+    const id = ids[i], me = selves[i];
+    if (me.error) {
+      // A cancelled or suspended account cannot describe itself; leave it out rather than list a bare id.
+      if (!/NOT_ENABLED|CANCEL|DEACTIVATED|SUSPENDED/i.test(me.error)) problems.push(id + ': ' + me.error);
+      continue;
+    }
+    const c = (me.rows[0] && me.rows[0].customer) || {};
+    if (c.manager) {
+      managers.push(id);
+      const kids = await childrenOf(id);
+      if (kids.error) problems.push('Manager ' + id + ': ' + kids.error); else kids.accounts.forEach(add);
+    } else {
+      add({ id, name: c.descriptiveName || id, currency: c.currencyCode, manager: '' });
     }
   }
-  // No manager configured — fall back to the directly accessible customers.
-  const r = await fetch(`https://googleads.googleapis.com/${googleV(env)}/customers:listAccessibleCustomers`, { headers });
-  const t = await r.text();
-  if (!r.ok) return json({ error: 'Google ' + r.status + ': ' + t.slice(0, 300) });
-  let d; try { d = JSON.parse(t); } catch (_) { return json({ error: 'Bad Google response' }); }
-  const accounts = (d.resourceNames || []).map((rn) => {
-    const id = String(rn).split('/').pop();
-    return { id, name: id };
-  });
-  return json({ accounts, manager: '',
-    note: 'No manager (MCC) id was available, so this is only the list of customers the OAuth user touches directly, without names. Set GOOGLE_ADS_LOGIN_CUSTOMER_ID on the worker, or the Manager Account ID in Configuration, to list every client account under the MCC.' });
+  const out = { accounts, manager: managers[0] || '', managers };
+  if (!managers.length) problems.push('No manager (MCC) account is reachable from this OAuth user, so only directly accessible accounts are listed. If your client accounts sit under an agency MCC, give this user access to the MCC, or set GOOGLE_ADS_LOGIN_CUSTOMER_ID.');
+  if (problems.length) out.note = problems.join(' | ');
+  return json(out);
 }
 
 async function tiktokAccounts(body, env) {

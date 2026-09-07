@@ -2646,8 +2646,9 @@ async function discoverClients(){
      this platform — two accounts that share a name are two clients. */
   const coreName=(n)=>String(n||'').toLowerCase().replace(/\s*\([^)]*\)\s*$/,'').replace(/[^a-z0-9]+/g,' ').trim();
   const free=(x,plat,key)=>!(x[plat]&&x[plat][key]);
-  let managerId='';   // Google MCC id, learned from discovery
-  const upsert=(plat,key,id,name,currency)=>{
+  const digits=(v)=>String(v||'').replace(/-/g,'');
+  let managerId='';   // a Google MCC id, learned from discovery (fallback when an account carries none)
+  const upsert=(plat,key,id,name,currency,mgr)=>{
     if(!id)return;
     let c=clients.find(x=>x[plat]&&x[plat][key]===id);
     if(!c)c=clients.find(x=>free(x,plat,key)&&(x.name||'').toLowerCase()===String(name||'').toLowerCase());
@@ -2656,7 +2657,7 @@ async function discoverClients(){
       google:{cid:'',mgr:''},meta:{act:''},tiktok:{adv:''},linkedin:{acct:''},pinterest:{acct:''},reddit:{acct:''}};
       clients.push(c); added++; }
     c[plat]=c[plat]||{}; c[plat][key]=id;
-    if(plat==='google'&&managerId)c.google.mgr=managerId;   // child accounts authenticate through the MCC
+    if(plat==='google'){ const m=digits(mgr||managerId); if(m)c.google.mgr=m; }   // each child authenticates through its own MCC
     /* remember the account's own billing currency — everything downstream
        labels money with this instead of assuming anything */
     if(currency)c[plat].cur=currency;
@@ -2669,7 +2670,6 @@ async function discoverClients(){
   }catch(e){ fail('Meta',e.message); }
 
   let clearedMgr=0, warnings=[];
-  const digits=(v)=>String(v||'').replace(/-/g,'');
   for(const [src,plat,key] of [['google_accounts','google','cid'],['tiktok_accounts','tiktok','adv'],['linkedin_accounts','linkedin','acct'],['pinterest_accounts','pinterest','acct'],['reddit_accounts','reddit','acct']]){
     try{
       const req={source:src};
@@ -2678,17 +2678,18 @@ async function discoverClients(){
       if(plat==='google'&&cfg.gmgr)req.managerId=digits(cfg.gmgr);
       const d=await call(req);
       if(plat==='google'){
-        /* Learn the manager id from whichever source has it: the worker's
-           reply, the Configuration field, or a client that already records it. */
+        /* Every manager id we can learn: the ones discovery found, the one
+           configured, and any a client already records. */
         const known=clients.find(x=>x.google&&x.google.mgr);
-        managerId=digits(d.manager||cfg.gmgr||(known&&known.google.mgr)||'');
-        /* A client whose Google id IS the manager can never return metrics —
+        const mgrs=new Set([].concat(d.managers||[],[d.manager,cfg.gmgr,known&&known.google.mgr]).map(digits).filter(Boolean));
+        managerId=[...mgrs][0]||'';
+        /* A client whose Google id IS a manager can never return metrics —
            managers run no ads. Clear it; the real child accounts arrive below
            as clients of their own. */
-        if(managerId)clients.forEach(c=>{ if(c.google&&digits(c.google.cid)===managerId){ c.google.cid=''; clearedMgr++; } });
+        if(mgrs.size)clients.forEach(c=>{ if(c.google&&mgrs.has(digits(c.google.cid))){ c.google.cid=''; clearedMgr++; } });
         if(d.note)warnings.push('Google: '+d.note);
       }
-      (d.accounts||[]).forEach(a=>upsert(plat,key,a.id,a.name,a.currency));
+      (d.accounts||[]).forEach(a=>upsert(plat,key,a.id,a.name,a.currency,a.manager));
     }catch(e){ fail(plat,e.message); }
   }
 
@@ -2729,7 +2730,7 @@ function autoDiscoverClients(){
    One click answers "why is platform X not working": worker reachability,
    auth, worker version, then a live credential probe per platform with the
    exact fix. All probes run in the worker; no secret ever reaches here. */
-const EXPECTED_WORKER_VERSION='3.5.0';
+const EXPECTED_WORKER_VERSION='3.6.0';
 async function runDoctor(){
   const out=document.getElementById('doc-out'), btn=document.getElementById('doc-btn');
   out.style.display=''; out.innerHTML='';
