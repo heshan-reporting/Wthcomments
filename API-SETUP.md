@@ -288,10 +288,14 @@ the `state`.
 **d. Exchange it, straight away.** The code is single-use and expires in minutes:
 
 ```bash
-curl -X POST 'https://business-api.tiktok.com/open_api/v1.3/oauth2/access_token/' \
-  -H 'Content-Type: application/json' \
-  -d '{"app_id":"YOUR_APP_ID","secret":"YOUR_APP_SECRET","auth_code":"THE_CODE"}'
+curl -X POST 'https://business-api.tiktok.com/open_api/v1.3/oauth2/access_token/' -H 'Content-Type: application/json' -d '{"app_id":"YOUR_APP_ID","secret":"YOUR_APP_SECRET","auth_code":"THE_CODE"}'
 ```
+
+Paste it as **one line**. Copying a multi-line command often flattens the
+trailing `\` into `\ ` (backslash-space), which escapes the space rather than
+continuing the line — curl then never sees `-d`, sends no body, and TikTok
+answers `40002 request body is required but missing` followed by a run of
+`URL rejected` errors.
 
 Exactly three fields — TikTok's Marketing API takes no `grant_type` here (that
 belongs to the separate TikTok *Developer* API for consumer apps).
@@ -415,11 +419,7 @@ don't own requires standard access (app review).
 3. Exchange it:
 
 ```bash
-curl -X POST 'https://api.pinterest.com/v5/oauth/token' \
-  -u 'APP_ID:APP_SECRET' \
-  -d 'grant_type=authorization_code' \
-  -d 'code=CODE' \
-  -d 'redirect_uri=YOUR_URI'
+curl -X POST 'https://api.pinterest.com/v5/oauth/token' -u 'APP_ID:APP_SECRET' -d 'grant_type=authorization_code' -d 'code=CODE' -d 'redirect_uri=YOUR_URI'
 ```
 
 Access token lives ~30 days; the refresh token ~1 year.
@@ -484,12 +484,7 @@ even with a perfectly valid token.
 3. Exchange:
 
 ```bash
-curl -X POST 'https://www.reddit.com/api/v1/access_token' \
-  -u 'CLIENT_ID:CLIENT_SECRET' \
-  -A 'cmm-ads-intelligence/1.0' \
-  -d 'grant_type=authorization_code' \
-  -d 'code=CODE' \
-  -d 'redirect_uri=YOUR_URI'
+curl -X POST 'https://www.reddit.com/api/v1/access_token' -u 'CLIENT_ID:CLIENT_SECRET' -A 'cmm-ads-intelligence/1.0' -d 'grant_type=authorization_code' -d 'code=CODE' -d 'redirect_uri=YOUR_URI'
 ```
 
 Keep the **`refresh_token`**. (Reddit rejects requests without a `User-Agent`,
