@@ -298,15 +298,34 @@ spending an `auth_code` on it.
 
 **d. Exchange it, straight away.** The code is single-use and expires in minutes:
 
+Set the three values, then send them. Keep this in the same terminal as the
+extractor above, so `$CODE` is still set:
+
 ```bash
-curl -X POST 'https://business-api.tiktok.com/open_api/v1.3/oauth2/access_token/' -H 'Content-Type: application/json' -d '{"app_id":"YOUR_APP_ID","secret":"YOUR_APP_SECRET","auth_code":"THE_CODE"}'
+APP_ID='YOUR_APP_ID'
+SECRET='YOUR_APP_SECRET'
+echo "app_id:${#APP_ID}  secret:${#SECRET}  code:${#CODE}"
 ```
 
-Paste it as **one line**. Copying a multi-line command often flattens the
-trailing `\` into `\ ` (backslash-space), which escapes the space rather than
-continuing the line — curl then never sees `-d`, sends no body, and TikTok
-answers `40002 request body is required but missing` followed by a run of
-`URL rejected` errors.
+That last line prints lengths, not values — expect roughly 19 / 40 / 40. A
+`code:0` means you are in a fresh shell; re-run the extractor.
+
+```bash
+curl -X POST 'https://business-api.tiktok.com/open_api/v1.3/oauth2/access_token/' -H 'Content-Type: application/json' -d "$(printf '{"app_id":"%s","secret":"%s","auth_code":"%s"}' "$APP_ID" "$SECRET" "$CODE")"
+```
+
+`printf` assembles the JSON from the variables, so the command carries no
+escaped quotes and no literal credentials for a stray paste to overwrite.
+Two failures this shape avoids:
+
+- Pasting a command whose lines end in `\` often flattens them to `\ `
+  (backslash-space), which escapes the space instead of continuing the line.
+  curl never sees `-d`, sends no body, and TikTok answers `40002 request body
+  is required but missing`, followed by `URL rejected` errors as curl treats
+  the leftover JSON as more URLs.
+- Pasting over a `\"auth_code\":` key inside an escaped JSON string replaces
+  the key rather than the value, and TikTok answers `40002 auth_code: Missing
+  data for required field`.
 
 Exactly three fields — TikTok's Marketing API takes no `grant_type` here (that
 belongs to the separate TikTok *Developer* API for consumer apps).
